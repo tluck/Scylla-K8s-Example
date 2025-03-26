@@ -1,0 +1,23 @@
+{{- if .Values.serviceMonitor.create -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: scylla-manager
+  namespace: scylla-manager
+  {{- if .Values.serviceMonitor.labels }}
+  labels:
+    {{- toYaml .Values.serviceMonitor.labels | nindent 4 }}
+  {{- end }}
+spec:
+  jobLabel: "app"
+  selector:
+    matchLabels:
+      {{- include "scylla-manager.selectorLabels" . | nindent 6 }}
+  endpoints:
+  - port: metrics
+    metricRelabelings:
+    - sourceLabels: [ host ]
+      targetLabel: instance
+      regex: (.*)
+      replacement: ${1}
+{{ end }}

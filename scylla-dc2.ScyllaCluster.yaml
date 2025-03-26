@@ -1,0 +1,65 @@
+apiVersion: scylla.scylladb.com/v1
+kind: ScyllaCluster
+metadata:
+  name: scylla
+spec:
+  agentVersion: 3.4.2
+  repository: docker.io/scylladb/scylla-enterprise
+  version: latest #2024.2.5
+  developerMode: true
+  automaticOrphanedNodeCleanup: true
+  exposeOptions:
+    broadcastOptions:
+      clients:
+        type: PodIP
+      nodes:
+        type: PodIP
+    nodeService:
+      type: Headless
+  sysctls:
+    - fs.aio-max-nr=30000000
+  externalSeeds:
+    - scylla-dc1-rack1-0.scylla-dc1
+  datacenter:
+    name: dc2 
+    racks:
+      - name:  rack1
+        members: 3
+        storage:
+          capacity: 1Gi
+          storageClassName: scylladb-local-xfs
+        resources:
+          requests:
+            cpu: 500m
+            memory: 100Mi
+          limits:
+            cpu: 2
+            memory: 2Gi
+        placement:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: scylla.scylladb.com/node-type
+                      operator: In
+                      values:
+                        - scylla
+          tolerations:
+            - effect: NoSchedule
+              key: scylla-operator.scylladb.com/dedicated
+              operator: Equal
+              value: scyllaclusters
+        volumes:
+          # - name: tls-certificates
+          #   secret:
+          #     secretName: scylla-server-certs # Reference the secret containing certificates.
+          - name: scylladb-serving-ca
+            configMap:
+              name: scylla-local-serving-ca
+              defaultMode: 420
+        volumeMounts:
+          # - name: tls-certificates
+          #   mountPath: /etc/scylla/certs # Mount path inside the pod.
+          - name: scylladb-serving-ca
+            readOnly: true
+            mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca

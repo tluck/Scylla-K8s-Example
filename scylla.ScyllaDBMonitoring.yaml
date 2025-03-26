@@ -1,0 +1,43 @@
+apiVersion: scylla.scylladb.com/v1alpha1
+kind: ScyllaDBMonitoring
+metadata:
+  name: scylla
+spec:
+  type: Platform
+  endpointsSelector:
+    matchLabels:
+      app.kubernetes.io/name: scylla
+      scylla-operator.scylladb.com/scylla-service-type: member
+      scylla/cluster: scylla
+  components:
+    prometheus:
+      storage:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: scylladb-local-xfs
+            resources:
+              requests:
+                storage: 1Gi
+      placement:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: scylla.scylladb.com/node-type
+                operator: In
+                values:
+                - scylla
+        tolerations:
+        - effect: NoSchedule
+          key: scylla-operator.scylladb.com/dedicated
+          operator: Equal
+          value: scyllaclusters
+    grafana:
+      exposeOptions: {}
+        # webInterface:
+        #   ingress:
+        #     ingressClassName: haproxy
+        #     dnsDomains:
+        #     - scylla-grafana.test.svc.cluster.local
+        #     annotations:
+        #       haproxy-ingress.github.io/ssl-passthrough: "true"
