@@ -3,9 +3,9 @@ kind: ScyllaCluster
 metadata:
   name: scylla
 spec:
-  agentVersion: 3.4.2
+  agentVersion: 3.5.0 # 3.4.2
   repository: docker.io/scylladb/scylla-enterprise
-  version: latest #2024.2.5
+  version: 2025.1.0 # 2024.2.7
   developerMode: true
   automaticOrphanedNodeCleanup: true
   exposeOptions:
