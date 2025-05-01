@@ -14,8 +14,8 @@ clusterDomain: cluster.local
 ##
 image:
   repository: quay.io/minio/minio
-  tag: RELEASE.2024-12-18T13-15-44Z
-  pullPolicy: IfNotPresent
+  tag: latest #RELEASE.2024-12-18T13-15-44Z
+  pullPolicy: Always #IfNotPresent
 
 imagePullSecrets: []
 # - name: "image-pull-secret"
@@ -25,8 +25,8 @@ imagePullSecrets: []
 ##
 mcImage:
   repository: quay.io/minio/mc
-  tag: RELEASE.2024-11-21T17-21-54Z
-  pullPolicy: IfNotPresent
+  tag: latest #RELEASE.2024-11-21T17-21-54Z
+  pullPolicy: Always #IfNotPresent
 
 ## minio mode, i.e. standalone or distributed
 mode: distributed ## other supported values are "standalone"
@@ -159,10 +159,10 @@ persistence:
   ##
   ## Storage class of PV to bind. By default it looks for standard storage class.
   ## If the PV uses a different storage class, specify that here.
-  storageClass: "standard"
+  storageClass: ""
   volumeName: ""
   accessMode: ReadWriteOnce
-  size: 2Gi
+  size: 1Gi
 
   ## If subPath is set mount a sub folder of a volume instead of the root of the volume.
   ## This is especially handy for volume plugins that don't natively support sub mounting (like glusterfs).
@@ -291,7 +291,7 @@ podLabels: {}
 resources:
   requests:
     memory: 500Mi 
-  limit:
+  limits:
     memory: 1Gi
 
 ## List of policies to be created after minio install

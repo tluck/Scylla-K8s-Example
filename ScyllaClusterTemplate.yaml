@@ -1,11 +1,11 @@
 apiVersion: scylla.scylladb.com/v1
 kind: ScyllaCluster
 metadata:
-  name: scylla
+  name: CLUSTERNAME
 spec:
-  agentVersion: 3.5.0 # 3.4.2
+  agentVersion: AGENTVERSION # 3.4.2
   repository: docker.io/scylladb/scylla-enterprise
-  version: 2025.1.0 # 2024.2.7
+  version: DBVERSION # 2024.2.7
   developerMode: true
   automaticOrphanedNodeCleanup: true
   exposeOptions:
@@ -18,21 +18,23 @@ spec:
       type: Headless
   sysctls:
     - fs.aio-max-nr=30000000
+  #MDC externalSeeds:
+  #MDC   - NAMESPACE-rack1-0.NAMESPACE
   datacenter:
-    name: dc1 
+    name: DATACENTER
     racks:
       - name:  rack1
         members: 3
         storage:
-          capacity: 1Gi
+          capacity: CAPACITY
           storageClassName: scylladb-local-xfs
         resources:
           requests:
             cpu: 500m
             memory: 100Mi
           limits:
-            cpu: 2
-            memory: 2Gi
+            cpu: CPULIMIT
+            memory: MEMORYLIMIT
         placement:
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:

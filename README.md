@@ -13,29 +13,30 @@ This example will deploy a small-scale 3-node cluster in a single "datacenter". 
 - Access to the internet for the helm charts and images in dockerhub such ScyllaDB Enterprise
 
 ### TL;DR
-* Run `./setupK8s.bash`
-* Run `./_deployScylla.bash`
+* Run `./_step_1` (link to setUpK8s.bash)
+* Run `./_step_2` (link to deployScylla.bash)
 
 ### Setup 
 
-Once the K8s cluster is built, then there are some preparations needed to set up the enviroment for Scylla. Run the **`setK8s.bash`** script. It will:
+Once the K8s cluster is built, then there are some preparations needed to set up the enviroment for Scylla. Run the **`setUpK8s.bash`** script. It will:
 
-1. Create the k8s storage class for Scylla to use persistent storage.
-2. Label the k8s nodes for targetting the deployment with the appropriate configuration and storage.
-3. Install the Jetstack cert-manager for TLS certificate mangement.
-4. Create a Minio S3 server for a backup location for the manager. Location is s3:scylla-backups
+1. Label the k8s nodes for targetting the ScyllaDB deployment.
+2. Installs the Jetstack cert-manager for TLS certificate management.
+3. Installs the Prometheus Operator.
+4. Installs the ScyllaDB Operator.
+5. Creates a storage class for Scylla to use local NVME persistent storage with XFS formatting.
+6. Creates a Minio S3 server for a backup location for the Scylla Manager. Location is s3:scylla-backups.
 
 ### Deployment
 
-The deploy script **`deployScylla_dc1.bash`** will:
+Review the init.conf file for any changes. And then run the deploy script **`deployScylla.bash`** as it will:
 
-1. Deploy the Scylla operator via helm.
-2. Deploy the Scylla cluster via kubetcl (or helm).
-3. Deploy Scylla manager (using Minio for S3 storage) via helm.
-4. Deploy Scylla monitoring (Grafana and Prometheus) via helm.
-5. Forward ports to the localhost for Granfana and cqlsh access.
+1. Deploy the Scylla cluster via kubectl (or helm).
+2. Deploy Scylla Monitoring (Grafana and Prometheus) via helm.
+3. Deploy Scylla Manager (using Minio for S3 storage) via helm.
+4. Forward tcp ports to the localhost for Granfana and cqlsh access.
 
-The **`deployScylla_dc2.bash`** makes a second 3-node cluster - so you have a multi-dc cluster.
+For a multi-dc cluster, change the init.conf dataCenterName to dc2 and rerun the **`deployScylla.bash`** to make a second 3-node cluster in the new "dc".
 
 ### Access
 * cqlsh: use the `client.bash` script to connect to the cluster pods.

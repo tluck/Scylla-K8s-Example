@@ -2,23 +2,21 @@
 
 date
 [[ -e init.conf ]] && source init.conf
-# scyllaNamespace="scylla"
-# clusterName="scylla"
 
 if [[ ${1} == '-d' ]]; then
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
-helm uninstall scylla          --namespace ${scyllaNamespace}
-kubectl -n ${scyllaNamespace}  delete ScyllaCluster/scylla
-# kubectl delete ns ${scyllaNamespace}
+if [[ ${helmEnabled} == true ]]; then
+  helm uninstall scylla --namespace ${scyllaNamespace}
+else
+  kubectl -n ${scyllaNamespace} delete ScyllaCluster/scylla
+fi
+# delete the manager
 helm uninstall scylla-manager  --namespace scylla-manager 
+# delete the cluster monitoring resource
+kubectl -n ${scyllaNamespace} delete ScyllaDBMonitoring/${clusterName} 
 # kubectl delete ns scylla-manager
-helm uninstall monitoring      --namespace scylla-monitoring
-kubectl -n ${scyllaNamespace} delete ScyllaDBMonitoring/scylla 
-# kubectl delete ns scylla-monitoring
-helm uninstall scylla-operator --namespace scylla-operator
-# kubectl delete ns scylla-operator
-
+# kubectl delete ns ${scyllaNamespace}
 else
 
 kubectl get sc -o name|grep xfs 
@@ -26,15 +24,6 @@ if [[ $? != 0 ]]; then
     printf "\n* * * Error - Mising storage class - run setupK8s.bash\n"
     exit 1
 fi
-
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
-printf "Installing the scylla-operator via Helm\n"
-# Install Scylla Operator
-helm install scylla-operator scylla-operator/helm/scylla-operator --create-namespace --namespace scylla-operator -f scylla-operator.yaml
-
-# wait
-kubectl -n scylla-operator wait deployment/scylla-operator --for=condition=Available=True --timeout=90s
-kubectl -n scylla-operator wait deployment/webhook-server  --for=condition=Available=True --timeout=90s
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Installing the Scylla Cluster\n"
@@ -103,11 +92,30 @@ printf "Using the Scylla server certificates issued by the cert-manager with Ope
 # kubectl -n ${scyllaNamespace} apply -f scylla-server-certificate.yaml
 fi
 
-printf "Creating the ScyllaCluster resource via Kubectl\n"
-kubectl -n ${scyllaNamespace} apply -f scylla-dc1.ScyllaCluster.yaml
-
-# printf "Creating the ScyllaCluster resource via Helm\n"
-# helm install scylla scylla --create-namespace --namespace ${scyllaNamespace} -f helm-scylla-dc1-values.yaml 
+if [[ ${helmEnabled} == true ]]; then
+  printf "Creating the ScyllaCluster resource via Helm\n"
+  templateFile="ScyllaClusterTemplateHelm.yaml"
+else
+  printf "Creating the ScyllaCluster resource via Kubectl\n"
+  templateFile="ScyllaClusterTemplate.yaml"
+fi
+[[ ${dataCenterName} != "dc1" ]] && mdc="" || mdc="#MDC "
+cat ${templateFile} | sed \
+    -e "s|NAMESPACE|${scyllaNamespace}|g" \
+    -e "s|CLUSTERNAME|${clusterName}|g" \
+    -e "s|DBVERSION|${dbVersion}|g" \
+    -e "s|AGENTVERSION|${agentVersion}|g" \
+    -e "s|DATACENTER|${dataCenterName}|g" \
+    -e "s|CAPACITY|${dbCapacity}|g" \
+    -e "s|CPULIMIT|${dbCpuLimit}|g" \
+    -e "s|MEMORYLIMIT|${dbMemoryLimit}|g" \
+    -e "s|#MDC |${mdc}|g" \
+    > ${scyllaNamespace}.ScyllaCluster.yaml
+if [[ ${helmEnabled} == true ]]; then
+  helm install scylla scylla --create-namespace --namespace ${scyllaNamespace} -f ${scyllaNamespace}.ScyllaCluster.yaml
+else
+  kubectl -n ${scyllaNamespace} apply -f ${scyllaNamespace}.ScyllaCluster.yaml
+fi
 
 # wait
 waitPeriod="600s"
@@ -115,34 +123,57 @@ printf "Waiting for ScyllaCluster/scylla resources to be ready within ${waitPeri
 sleep 5 
 kubectl -n ${scyllaNamespace} wait ScyllaCluster/scylla --for=condition=Available=True --timeout=${waitPeriod}
 
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
-# Install Scylla Manager
-printf "Installing the scylla-manager via Helm\n"
-helm install scylla-manager scylla-manager --create-namespace --namespace scylla-manager -f scylla-manager.yaml
-
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
-printf "Installing the prometheus-operator via Helm\n"
-# Install Prometheus Operator
-helm install monitoring prometheus-community/kube-prometheus-stack --create-namespace --namespace scylla-monitoring
-
+[[ ${context} == *eks* ]] && defaultStorageClass="gp" || defaultStorageClass="standard"
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 # Install the monitor resource
 printf "Creating the ScyllaDBMonitoring resources\n"
-kubectl -n ${scyllaNamespace} apply -f scylla.ScyllaDBMonitoring.yaml
-sleep 1
+cat ScyllaDBMonitoringTemplate.yaml | sed \
+    -e "s|CLUSTERNAME|${clusterName}|g" \
+    -e "s|STORAGECLASS|${defaultStorageClass}|g" \
+    > ${scyllaNamespace}.ScyllaDBMonitoring.yaml
+kubectl -n ${scyllaNamespace} apply --server-side -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
+
+sleep 2
+# patch the configMap to update the grafana.ini file
+kubectl -n ${scyllaNamespace} get configmap scylla-grafana-configs -o yaml \
+  | sed -e 's|default_home.*json|default_home_dashboard_path = /var/run/dashboards/scylladb/scylladb-master/scylla-overview.master.json|' \
+  | kubectl -n ${scyllaNamespace} apply set-last-applied --create-annotation=true -f -
+kubectl -n ${scyllaNamespace} get configmap scylla-grafana-configs -o yaml \
+  | sed -e 's|default_home.*json|default_home_dashboard_path = /var/run/dashboards/scylladb/scylladb-master/scylla-overview.master.json|' \
+  | kubectl -n ${scyllaNamespace} apply -f -
+# patch the grafana deployment to reduce the number of dashboards to master
 kubectl -n ${scyllaNamespace} patch deployment scylla-grafana --type='json' \
   -p='[{"op": "replace", "path": "/spec/template/spec/initContainers/0/volumeMounts", "value": 
         [{"name": "decompressed-configmaps", 
         "mountPath": "/var/run/decompressed-configmaps"}, 
-        {"name": "scylla-grafana-scylladb-dashboards-scylladb-2024-2", 
-        "mountPath": "/var/run/configmaps/grafana-scylladb-dashboards/scylladb-2024.2"}]}]'
+        {"name": "scylla-grafana-scylladb-dashboards-scylladb-master", 
+        "mountPath": "/var/run/configmaps/grafana-scylladb-dashboards/scylladb-master"}]}]'
 kubectl -n ${scyllaNamespace} wait scylladbmonitoring/scylla --for=condition=Available=True --timeout=90s
 username=$( kubectl -n ${scyllaNamespace} get secret/scylla-grafana-admin-credentials --template '{{ index .data "username" }}' | base64 -d )
 password=$( kubectl -n ${scyllaNamespace} get secret/scylla-grafana-admin-credentials --template '{{ index .data "password" }}' | base64 -d )
 printf  "\nGrafana credentials: \n\tUsername: ${username} \n\tPassword: ${password} \n\n"
+
+printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+# Install Scylla Manager
+printf "Installing the scylla-manager via Helm\n"
+cat ScyllaManagerTemplateHelm.yaml | sed \
+    -e "s|DBVERSION|${dbVersion}|g" \
+    -e "s|AGENTVERSION|${agentVersion}|g" \
+    -e "s|DATACENTER|${dataCenterName}|g" \
+    -e "s|MANAGERVERSION|${managerVersion}|g" \
+    -e "s|MANAGERCPULIMIT|${managerCpuLimit}|g" \
+    -e "s|MANAGERMEMORYLIMIT|${managerMemoryLimit}|g" \
+    -e "s|MANAGERMEMBERS|${managerMembers}|g" \
+    -e "s|MANAGERDBCAPACITY|${managerDbCapacity}|g" \
+    -e "s|MANAGERDBCPULIMIT|${managerDbCpuLimit}|g" \
+    -e "s|MANAGERDBMEMORYLIMIT|${managerDbMemoryLimit}|g" \
+    -e "s|STORAGECLASS|${defaultStorageClass}|g" \
+    > ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
+helm install scylla-manager scylla-manager --create-namespace --namespace scylla-manager -f ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
   
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 # open up ports for granfana and scylla client for non-tls and tls
+kubectl -n ${scyllaNamespace} wait deployment/scylla-grafana  --for=condition=Available=True --timeout=90s
 ./port_forward.bash
 fi
 

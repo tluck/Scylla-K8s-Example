@@ -5,6 +5,8 @@ helm uninstall minio -n minio
 exit
 fi
 
+printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+printf "Installing the Minio S3 Server\n"
 # create a basic 1 node s3 server
 helm install minio \
    --set replicas=1 \

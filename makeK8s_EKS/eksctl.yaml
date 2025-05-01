@@ -1,0 +1,42 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: tjl-basic
+  region: us-west-2
+  version: "1.32"
+
+availabilityZones:
+- us-west-2a
+# - us-west-2b
+# - us-west-2c
+
+iam:
+  withOIDC: false
+
+managedNodeGroups:
+  - name: scylla-pool
+    instanceType: i4i.large # m5a.2xlarge
+    desiredCapacity: 3
+    minSize: 3
+    maxSize: 3
+    volumeSize: 100
+    volumeType: gp3
+    volumeEncrypted: true
+    disableIMDSv1: true
+    labels:
+      scylla.scylladb.com/node-type: scylla
+    availabilityZones:
+    - us-west-2a
+    # - us-west-2b
+    # - us-west-2c
+    ssh:
+      allow: true
+      publicKeyPath: ~/.ssh/tluck-aws-us-west-2.pub
+    iam:
+      withAddonPolicies:
+        ebs: true
+
+addons:
+- name: aws-ebs-csi-driver
+  wellKnownPolicies:      # add IAM and service account
+    ebsCSIController: true

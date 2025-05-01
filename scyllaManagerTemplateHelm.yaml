@@ -6,7 +6,7 @@ fullnameOverride: ""
 image:
   repository: scylladb
   pullPolicy: IfNotPresent
-  tag: 3.5.0 # 3.4.2 # 3.4.0@sha256:6424c36929b39ef4e679ee7d61578b1070e28c186b23b278147fde8e391d9db1
+  tag: MANAGERVERSION # 3.5.0 # 3.4.0@sha256:6424c36929b39ef4e679ee7d61578b1070e28c186b23b278147fde8e391d9db1
 # Allows to customize Scylla Manager Controller image
 controllerImage:
   repository: scylladb
@@ -20,11 +20,17 @@ resources:
   requests:
     cpu: 10m
     memory: 20Mi
+  limits:
+    cpu: MANAGERCPULIMIT # 1
+    memory: MANAGERMEMORYLIMIT # 1Gi
 # Resources allocated to Scylla Manager pods
 controllerResources:
   requests:
     cpu: 10m
     memory: 20Mi
+  limits:
+    cpu: MANAGERCPULIMIT # 1
+    memory: MANAGERMEMORYLIMIT
 # Node selector for Scylla Manager pod
 nodeSelector: {}
 # Tolerations for Scylla Manager pod
@@ -61,23 +67,23 @@ scylla:
   developerMode: true
   scyllaImage:
     repository: scylladb/scylla-enterprise # scylladb/scylla
-    tag: latest # 6.2.0 # Overrides the image tag whose default is the chart appVersion.
+    tag: DBVERSION # latest # 6.2.0 # Overrides the image tag whose default is the chart appVersion.
   agentImage:
-    tag: latest # 3.4.0@sha256:441403aed8880cad1feef68aa7a8ee9ffd99a458dc1dcff3dc54ce5bf3cb07b7
-  datacenter: manager-dc
+    tag: AGENTVERSION # latest # 3.4.0@sha256:441403aed8880cad1feef68aa7a8ee9ffd99a458dc1dcff3dc54ce5bf3cb07b7
+  datacenter: manager-DATACENTER
   racks:
     - name: manager-rack
-      members: 1
+      members: MANAGERMEMBERS # 1 or 3
       storage:
-        capacity: 2Gi
-        storageClassName: scylladb-local-xfs
+        capacity: MANAGERDBCAPACITY # 1Gi 
+        storageClassName: "STORAGECLASS" # use default storage class"
       resources:
-        limits:
-          cpu: 1
-          memory: 200Mi
         requests:
-          cpu: 1
+          cpu: 200m
           memory: 200Mi
+        limits:
+          cpu: MANAGERDBCPULIMIT # 2
+          memory: MANAGERDBMEMORYLIMIT # 2Gi
       placement:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

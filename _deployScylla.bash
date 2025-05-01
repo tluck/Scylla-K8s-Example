@@ -1,1 +1,0 @@
-deployScylla_dc1.bash

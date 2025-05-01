@@ -1,20 +1,20 @@
 apiVersion: scylla.scylladb.com/v1alpha1
 kind: ScyllaDBMonitoring
 metadata:
-  name: scylla
+  name: CLUSTERNAME
 spec:
   type: Platform
   endpointsSelector:
     matchLabels:
-      app.kubernetes.io/name: scylla
+      app.kubernetes.io/name: CLUSTERNAME
       scylla-operator.scylladb.com/scylla-service-type: member
-      scylla/cluster: scylla
+      scylla/cluster: CLUSTERNAME
   components:
     prometheus:
       storage:
         volumeClaimTemplate:
           spec:
-            storageClassName: scylladb-local-xfs
+            storageClassName: "STORAGECLASS" # standard or gp2 vs xfs
             resources:
               requests:
                 storage: 1Gi
