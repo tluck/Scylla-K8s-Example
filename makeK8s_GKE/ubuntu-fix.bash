@@ -39,8 +39,8 @@ EOF
 
 # Wait for all pods to be Running or Succeeded
 while true; do
+  sleep 60
   echo "Waiting for DaemonSet pods to run to completion ..."
-  sleep 20
   not_ready=$(kubectl -n kube-system get pods -l name=ubuntu-xfs-installer \
     --field-selector=status.phase!=Succeeded,status.phase!=Running \
     --no-headers | wc -l)

@@ -1,0 +1,53 @@
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: scylla-dc1
+  name: scylla-member-pod-watcher
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: scylla-member-pod-watcher-binding
+  namespace: scylla-dc1
+subjects:
+- kind: ServiceAccount
+  name: scylla-member
+  namespace: scylla-dc1
+roleRef:
+  kind: Role
+  name: scylla-member-pod-watcher
+  apiGroup: rbac.authorization.k8s.io
+
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: scylla-manager
+  name: scylla-member-pod-watcher
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: scylla-manager-pod-watcher-binding
+  namespace: scylla-manager
+subjects:
+- kind: ServiceAccount
+  name: scylla-manager-cluster-member
+  namespace: scylla-manager
+roleRef:
+  kind: Role
+  name: scylla-member-pod-watcher
+  apiGroup: rbac.authorization.k8s.io
+
+
+

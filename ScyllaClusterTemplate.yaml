@@ -8,6 +8,9 @@ spec:
   version: DBVERSION # 2024.2.7
   developerMode: true
   automaticOrphanedNodeCleanup: true
+  backups:
+    - name: backup
+      location: [s3:scylla-backups]
   exposeOptions:
     broadcastOptions:
       clients:
@@ -16,6 +19,7 @@ spec:
         type: PodIP
     nodeService:
       type: Headless
+  cpuset: true
   sysctls:
     - fs.aio-max-nr=30000000
   #MDC externalSeeds:

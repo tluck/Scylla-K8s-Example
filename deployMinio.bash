@@ -1,21 +1,57 @@
-#helm install --namespace minio-operator --create-namespace minio-operator minio/operator
+#!/usr/bin/env bash
+
 
 if [[ ${1} == '-d' ]]; then
-helm uninstall minio -n minio
-exit
-fi
+  helm uninstall minio-tenant -n minio
+  helm uninstall minio-operator -n minio-operator
+
+else
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Installing the Minio S3 Server\n"
-# create a basic 1 node s3 server
-helm install minio \
-   --set replicas=1 \
-   --set persistence.enabled=true \
-   --set mode=standalone \
-   --set defaultBucket.enabled=true \
-   --set defaultBucket.name=scylla-backups \
-  minio/minio -f minio-values.yaml --create-namespace -n minio
 
-# update the s3 profile for minio vs AWS
-kubectl -n minio exec -it $(kubectl get pods --namespace minio -l "release=minio" -o name) \
+printf "\nDeploying minio-operator via Helm\n"
+helm install minio-operator \
+  --namespace minio-operator \
+  --create-namespace \
+  --set operator.replicaCount=1 \
+  minio-operator/operator
+
+printf "\nDeploying minio-tentant via Helm\n"
+helm install minio-tenant \
+  --namespace minio \
+  --create-namespace \
+  --set tenant.replicas=1 \
+  --set tenant.name=minio \
+  --set tenant.pools[0].name=pool \
+  --set tenant.pools[0].servers=1 \
+  --set tenant.pools[0].volumesPerServer=1 \
+  --set tenant.pools[0].size=1Gi \
+  --set tenant.defaultBuckets[0].name=scylla-backups \
+  --set tenant.certificate.requestAutoCert=false \
+  minio-operator/tenant 
+
+printf "\nWaiting for minio-tenant to deploy - in about 80-90s\n"
+while true;
+do
+pod=$( kubectl -n minio get pod -l v1.min.io/tenant=minio -o name |wc -w )
+if [[ ${pod} == *1* ]]; then 
+    break
+else
+    sleep 5
+fi 
+done
+kubectl wait -n minio --for=condition=Ready pod -l v1.min.io/tenant=minio --timeout=90s
+
+# configure the bucket
+kubectl -n minio exec -it $(kubectl get pods --namespace minio -l "v1.min.io/tenant=minio" -o name) -c minio \
   -- bash -c 'mc alias set s3 http://localhost:9000 minio minio123 --insecure'
+
+kubectl -n minio exec -it $(kubectl get pods --namespace minio -l "v1.min.io/tenant=minio" -o name) -c minio \
+  -- bash -c 'mc mb s3/scylla-backups --insecure'
+
+# patch the svc - minio seems to work best on port 9000 vs 80
+sleep 10
+kubectl -n minio get svc minio -o yaml | sed -e "s|: 80|: 9000|" | kubectl replace -f -
+
+fi

@@ -8,15 +8,14 @@ if [[ ${1} == '-d' ]]; then
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 if [[ ${helmEnabled} == true ]]; then
   helm uninstall scylla --namespace ${scyllaNamespace}
+  helm uninstall scylla-manager  --namespace scylla-manager 
 else
-  kubectl -n ${scyllaNamespace} delete ScyllaCluster/scylla
+  kubectl -n ${scyllaNamespace} delete ScyllaCluster/${clusterName}
+  kubectl delete -f ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
 fi
-# delete the manager
-helm uninstall scylla-manager  --namespace scylla-manager 
 # delete the cluster monitoring resource
+kubectl -n ${scyllaNamespace} delete -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 kubectl -n ${scyllaNamespace} delete ScyllaDBMonitoring/${clusterName} 
-# kubectl delete ns scylla-manager
-# kubectl delete ns ${scyllaNamespace}
 else
 
 kubectl get sc -o name|grep xfs 
@@ -42,18 +41,23 @@ type: Opaque
 data:
   scylla-manager-agent.yaml: $(echo -n \
 "s3:
-  access_key_id: \"minio\"
-  secret_access_key: \"minio123\"
-  provider: \"Minio\"
-  endpoint: \"http://minio.minio:9000\"
+  access_key_id: minio
+  secret_access_key: minio123
+  provider: Minio
+  endpoint: http://minio.minio:9000
   no_check_bucket: true
 " | base64 | tr -d '\n')
 EOF
 fi
 
+  # access_key_id: \"minio\"
+  # secret_access_key: \"minio123\"
+  # provider: \"Minio\"
+  # endpoint: \"http://minio.minio:9000\"
+
 # create a configMap to define Scylla options
 kubectl -n ${scyllaNamespace} delete configmap scylla-config > /dev/null 2>&1
-if [[ ${enableSecurity} == true ]]; then
+if [[ ${enableSecurity} == true && ${helmEnabled} == false ]]; then
 printf "Creating a configMap to define the basic Scylla config properties\n"
 kubectl -n ${scyllaNamespace} apply --server-side -f=- <<EOF
 apiVersion: v1
@@ -133,7 +137,7 @@ cat ScyllaDBMonitoringTemplate.yaml | sed \
     > ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 kubectl -n ${scyllaNamespace} apply --server-side -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 
-sleep 2
+sleep 5
 # patch the configMap to update the grafana.ini file
 kubectl -n ${scyllaNamespace} get configmap scylla-grafana-configs -o yaml \
   | sed -e 's|default_home.*json|default_home_dashboard_path = /var/run/dashboards/scylladb/scylladb-master/scylla-overview.master.json|' \
@@ -155,8 +159,14 @@ printf  "\nGrafana credentials: \n\tUsername: ${username} \n\tPassword: ${passwo
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 # Install Scylla Manager
-printf "Installing the scylla-manager via Helm\n"
-cat ScyllaManagerTemplateHelm.yaml | sed \
+if [[ ${helmEnabled} == true ]]; then
+  printf "Creating the ScyllaManager resources via Helm\n"
+  templateFile="ScyllaManagerTemplateHelm.yaml"
+else
+  printf "Creating the ScyllaManager resources via Kubectl\n"
+  templateFile="ScyllaManagerTemplate.yaml"
+fi
+cat ${templateFile} | sed \
     -e "s|DBVERSION|${dbVersion}|g" \
     -e "s|AGENTVERSION|${agentVersion}|g" \
     -e "s|DATACENTER|${dataCenterName}|g" \
@@ -169,10 +179,17 @@ cat ScyllaManagerTemplateHelm.yaml | sed \
     -e "s|MANAGERDBMEMORYLIMIT|${managerDbMemoryLimit}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     > ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
-helm install scylla-manager scylla-manager --create-namespace --namespace scylla-manager -f ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
+if [[ ${helmEnabled} == true ]]; then
+  helm install scylla-manager scylla-manager --create-namespace --namespace scylla-manager -f ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
+else
+  kubectl -n scylla-manager apply --server-side -f ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
+fi
+
+# add some permissions to the scylla and scylla-manager service accounts
+kubectl apply --server-side -f role-fix.yaml
   
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
-# open up ports for granfana and scylla client for non-tls and tls
+# open up ports for granfana and scylla client for non-tls and tls and minio
 kubectl -n ${scyllaNamespace} wait deployment/scylla-grafana  --for=condition=Available=True --timeout=90s
 ./port_forward.bash
 fi

@@ -1,5 +1,5 @@
 # Allows to override Scylla name showing up in recommended k8s labels
-nameOverride: "NAMESPACE"
+nameOverride: "" #"NAMESPACE"
 # Allows to override names used in Scylla k8s objects.
 fullnameOverride: ""
 # Allows to customize Scylla image

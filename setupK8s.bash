@@ -8,20 +8,21 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
   helm uninstall cert-manager     --namespace cert-manager
   helm uninstall monitoring       --namespace scylla-monitoring
   helm uninstall scylla-operator  --namespace scylla-operator
+  kubectl delete ns local-csi-driver
+  kubectl delete ns scylla-operator-node-tuning
   [[ ${backupEnabled} == true ]] && ./deployMinio.bash -d
+
   if [[ ${1} == '-x' ]]; then
+    kubectl delete ns cert-manager
     kubectl delete ns ${scyllaNamespace}
     kubectl delete ns scylla-monitoring
     kubectl delete ns local-path-storage
-    kubectl delete ns local-csi-driver
-    kubectl delete ns scylla-operator-node-tuning
     kubectl delete ns scylla-operator
-    kubectl delete ns cert-manager
     kubectl delete ns scylla-manager
-    kubectl delete $( kubectl get pvc -o name --all-namespaces )
-    kubectl delete $( kubectl get pv -o name )
+    kubectl delete ns minio-tenant
+    kubectl delete ns minio-operator
+    kubectl delete $( kubectl get pvc -o name --all-namespaces | egrep "scylla|minio" ) 
     kubectl delete $( kubectl get crds -o name | grep scylla ) 
-    kubectl delete ns minio
   fi
 else
 
@@ -30,7 +31,7 @@ printf "Import/Update Helm Repos\n"
 helm repo add jetstack            	https://charts.jetstack.io                                  
 helm repo add scylla              	https://scylla-operator-charts.storage.googleapis.com/stable
 helm repo add prometheus-community	https://prometheus-community.github.io/helm-charts          
-helm repo add minio               	https://charts.min.io/                                      
+helm repo add minio-operator      	https://operator.min.io    
 helm repo update
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
