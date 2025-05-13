@@ -17,7 +17,7 @@ spec:
             storageClassName: "STORAGECLASS" # standard or gp2 vs xfs
             resources:
               requests:
-                storage: 1Gi
+                storage: MONITORCAPACITY
       placement:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

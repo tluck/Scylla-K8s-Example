@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+source init.conf
 
 if [[ ${1} == '-d' ]]; then
   helm uninstall minio-tenant -n minio
@@ -17,6 +18,7 @@ helm install minio-operator \
   --set operator.replicaCount=1 \
   minio-operator/operator
 
+[[ ${context} == *docker-desktop* ]] && tenantPoolSize=1Gi || tenantPoolSize=10Gi
 printf "\nDeploying minio-tentant via Helm\n"
 helm install minio-tenant \
   --namespace minio \
@@ -26,7 +28,7 @@ helm install minio-tenant \
   --set tenant.pools[0].name=pool \
   --set tenant.pools[0].servers=1 \
   --set tenant.pools[0].volumesPerServer=1 \
-  --set tenant.pools[0].size=1Gi \
+  --set tenant.pools[0].size=${tenantPoolSize} \
   --set tenant.defaultBuckets[0].name=scylla-backups \
   --set tenant.certificate.requestAutoCert=false \
   minio-operator/tenant 

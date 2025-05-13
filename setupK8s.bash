@@ -71,13 +71,13 @@ kubectl -n scylla-operator wait deployment/webhook-server  --for=condition=Avail
 
 sleep 5
 # update the scylla-operator config
-kubectl apply --server-side -f=- <<EOF # ScyllaOperatorConfig.yaml
+kubectl apply --server-side --force-conflicts -f=- <<EOF # ScyllaOperatorConfig.yaml
 apiVersion: scylla.scylladb.com/v1alpha1
 kind: ScyllaOperatorConfig
 metadata:
   name: cluster
 spec:
-  scyllaUtilsImage: "docker.io/scylladb/scylla-enterprise:${dbVersion}"
+  scyllaUtilsImage: docker.io/scylladb/scylla-enterprise:${dbVersion}
 EOF
 
 printf "Using the context ${context}\n"

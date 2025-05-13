@@ -36,9 +36,9 @@ automaticOrphanedNodeCleanup: false
 sysctls: 
   - fs.aio-max-nr=30000000
 # Scylla Manager Backups task definition
-backups: #[]
-  - name: backup
-    location: [s3:scylla-backups]
+#BAK backups: #[]
+#BAK   - name: backup
+#BAK     location: [s3:scylla-backups]
 # Scylla Manager Repair task definition
 repairs: []
 # scyllaArgs will be appended to Scylla binary startup parameters.

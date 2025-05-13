@@ -26,6 +26,7 @@ Once the K8s cluster is built, then there are some preparations needed to set up
 4. Installs the ScyllaDB Operator.
 5. Creates a storage class for Scylla to use local NVME persistent storage with XFS formatting.
 6. Creates a Minio S3 server for a backup location for the Scylla Manager. Location is s3:scylla-backups.
+7. For backup in GKE, a GCS bucket and Service account is needed.
 
 ### Deployment
 
@@ -46,6 +47,7 @@ On the manager, to run a backup:
 
 	sctool cluster update --username cassandra --password cassandra -c scylla-dc1/scylla
 	sctool backup -c scylla-dc1/scylla -L s3:scylla-backups
+	sctool backup -c scylla-dc1/scylla -L gcs:scylla-backups-gke
 
 Contributions should be submitted as pull requests.
 

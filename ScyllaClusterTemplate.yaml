@@ -6,11 +6,13 @@ spec:
   agentVersion: AGENTVERSION # 3.4.2
   repository: docker.io/scylladb/scylla-enterprise
   version: DBVERSION # 2024.2.7
-  developerMode: true
+  developerMode: DEVMODE
   automaticOrphanedNodeCleanup: true
-  backups:
-    - name: backup
-      location: [s3:scylla-backups]
+  #BAK backups:
+  #BAK   - name: s3
+  #BAK     location: [s3:scylla-backups]
+  #GCS   - name: gcs
+  #GCS     location: [gcs:scylla-backups-gke]
   exposeOptions:
     broadcastOptions:
       clients:
@@ -61,9 +63,17 @@ spec:
             configMap:
               name: scylla-local-serving-ca
               defaultMode: 420
+        #GCS   - name: gcs-service-account
+        #GCS     secret:
+        #GCS       secretName: gcs-service-account
         volumeMounts:
           # - name: tls-certificates
           #   mountPath: /etc/scylla/certs # Mount path inside the pod.
           - name: scylladb-serving-ca
             readOnly: true
             mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+        #GCS agentVolumeMounts:
+        #GCS   - name: gcs-service-account
+        #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
+        #GCS     subPath: gcs-service-account.json
+        #GCS     readOnly: true

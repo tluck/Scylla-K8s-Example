@@ -29,7 +29,23 @@ printf "Installing the Scylla Cluster\n"
 
 kubectl create ns ${scyllaNamespace} || true
 # create a secret to define the backup location
+bak="#BAK "
+gcs="#GCS "
 if [[ ${backupEnabled} == true ]]; then
+bak=""
+
+# set developerMode to true for docker-desktop (not actually using XFS)
+[[ ${context} == *docker-desktop* ]] && developerMode="true" || developerMode="false"
+
+# GKE and backup to GCS
+if [[ -e gcs-service-account.json && ${context} == *gke* ]]; then
+  gcs=""
+  kubectl annotate serviceaccount --namespace scylla-dc1 scylla-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite  
+  kubectl -n ${scyllaNamespace} delete secret gcs-service-account > /dev/null 2>&1
+  kubectl -n ${scyllaNamespace} create secret generic gcs-service-account \
+    --from-file=gcs-service-account.json=gcs-service-account.json
+fi
+
 kubectl -n ${scyllaNamespace} delete secret scylla-agent-config-secret > /dev/null 2>&1
 printf "Creating a secret to define the backup location\n"
 kubectl -n ${scyllaNamespace} apply -f - <<EOF
@@ -46,14 +62,12 @@ data:
   provider: Minio
   endpoint: http://minio.minio:9000
   no_check_bucket: true
+${gcs}gcs:
+${gcs}  service_account_file: /etc/scylla-manager-agent/gcs-service-account.json
 " | base64 | tr -d '\n')
 EOF
-fi
 
-  # access_key_id: \"minio\"
-  # secret_access_key: \"minio123\"
-  # provider: \"Minio\"
-  # endpoint: \"http://minio.minio:9000\"
+fi # end of backupEnabled
 
 # create a configMap to define Scylla options
 kubectl -n ${scyllaNamespace} delete configmap scylla-config > /dev/null 2>&1
@@ -108,11 +122,14 @@ cat ${templateFile} | sed \
     -e "s|NAMESPACE|${scyllaNamespace}|g" \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|DBVERSION|${dbVersion}|g" \
+    -e "s|DEVMODE|${developerMode}|g" \
     -e "s|AGENTVERSION|${agentVersion}|g" \
     -e "s|DATACENTER|${dataCenterName}|g" \
     -e "s|CAPACITY|${dbCapacity}|g" \
     -e "s|CPULIMIT|${dbCpuLimit}|g" \
     -e "s|MEMORYLIMIT|${dbMemoryLimit}|g" \
+    -e "s|#BAK |${bak}|g" \
+    -e "s|#GCS |${gcs}|g" \
     -e "s|#MDC |${mdc}|g" \
     > ${scyllaNamespace}.ScyllaCluster.yaml
 if [[ ${helmEnabled} == true ]]; then
@@ -134,6 +151,7 @@ printf "Creating the ScyllaDBMonitoring resources\n"
 cat ScyllaDBMonitoringTemplate.yaml | sed \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
+    -e "s|MONITORCAPACITY|${monitoringCapacity}|g" \
     > ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 kubectl -n ${scyllaNamespace} apply --server-side -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 
@@ -168,6 +186,7 @@ else
 fi
 cat ${templateFile} | sed \
     -e "s|DBVERSION|${dbVersion}|g" \
+    -e "s|DEVMODE|${developerMode}|g" \
     -e "s|AGENTVERSION|${agentVersion}|g" \
     -e "s|DATACENTER|${dataCenterName}|g" \
     -e "s|MANAGERVERSION|${managerVersion}|g" \
