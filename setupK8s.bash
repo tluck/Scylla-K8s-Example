@@ -10,7 +10,8 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
   helm uninstall scylla-operator  --namespace scylla-operator
   kubectl delete ns local-csi-driver
   kubectl delete ns scylla-operator-node-tuning
-  [[ ${backupEnabled} == true ]] && ./deployMinio.bash -d
+
+  [[ ${backupEnabled} == true ]] && ./deployMinio.bash ${1}
 
   if [[ ${1} == '-x' ]]; then
     kubectl delete ns cert-manager
@@ -19,9 +20,7 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
     kubectl delete ns local-path-storage
     kubectl delete ns scylla-operator
     kubectl delete ns scylla-manager
-    kubectl delete ns minio-tenant
-    kubectl delete ns minio-operator
-    kubectl delete $( kubectl get pvc -o name --all-namespaces | egrep "scylla|minio" ) 
+    kubectl delete $( kubectl get pvc -o name --all-namespaces | egrep "scylla" ) 
     kubectl delete $( kubectl get crds -o name | grep scylla ) 
   fi
 else
@@ -63,7 +62,7 @@ helm install monitoring prometheus-community/kube-prometheus-stack --create-name
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Installing the scylla-operator via Helm\n"
 # Install Scylla Operator
-helm install scylla-operator scylla-operator/helm/scylla-operator --create-namespace --namespace scylla-operator -f scylla-operator.yaml
+helm install scylla-operator scylla/scylla-operator --create-namespace --namespace scylla-operator -f scylla-operator.yaml
 
 # wait
 kubectl -n scylla-operator wait deployment/scylla-operator --for=condition=Available=True --timeout=90s
