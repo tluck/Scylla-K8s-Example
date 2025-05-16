@@ -2,9 +2,14 @@
 
 source init.conf
 
-if [[ ${1} == '-d' ]]; then
+if [[ ${1} == '-d' || ${1} == '-x' ]]; then
   helm uninstall minio-tenant -n minio
   helm uninstall minio-operator -n minio-operator
+
+  if [[ ${1} == '-x' ]]; then
+  kubectl delete namespace minio
+  kubectl delete namespace minio-operator
+  fi
 
 else
 

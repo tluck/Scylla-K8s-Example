@@ -10,13 +10,13 @@ if [[ ${helmEnabled} == true ]]; then
   helm uninstall scylla --namespace ${scyllaNamespace}
   helm uninstall scylla-manager  --namespace scylla-manager 
 else
-  kubectl -n ${scyllaNamespace} delete ScyllaCluster/${clusterName}
-  kubectl delete -f ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
+  kubectl -n ${scyllaNamespace} delete -f ${scyllaNamespace}.ScyllaCluster.yaml
+  kubectl -n scylla-manager     delete -f ${scyllaNamespace}.ScyllaManager.yaml
 fi
 # delete the cluster monitoring resource
 kubectl -n ${scyllaNamespace} delete -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
-kubectl -n ${scyllaNamespace} delete ScyllaDBMonitoring/${clusterName} 
-else
+
+else # deploy 
 
 kubectl get sc -o name|grep xfs 
 if [[ $? != 0 ]]; then
@@ -40,7 +40,6 @@ bak=""
 # GKE and backup to GCS
 if [[ -e gcs-service-account.json && ${context} == *gke* ]]; then
   gcs=""
-  kubectl annotate serviceaccount --namespace scylla-dc1 scylla-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite  
   kubectl -n ${scyllaNamespace} delete secret gcs-service-account > /dev/null 2>&1
   kubectl -n ${scyllaNamespace} create secret generic gcs-service-account \
     --from-file=gcs-service-account.json=gcs-service-account.json
@@ -48,7 +47,7 @@ fi
 
 kubectl -n ${scyllaNamespace} delete secret scylla-agent-config-secret > /dev/null 2>&1
 printf "Creating a secret to define the backup location\n"
-kubectl -n ${scyllaNamespace} apply -f - <<EOF
+kubectl -n ${scyllaNamespace} apply --server-side -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
@@ -133,27 +132,30 @@ cat ${templateFile} | sed \
     -e "s|#MDC |${mdc}|g" \
     > ${scyllaNamespace}.ScyllaCluster.yaml
 if [[ ${helmEnabled} == true ]]; then
-  helm install scylla scylla --create-namespace --namespace ${scyllaNamespace} -f ${scyllaNamespace}.ScyllaCluster.yaml
+  helm install scylla scylla/scylla --create-namespace --namespace ${scyllaNamespace} -f ${scyllaNamespace}.ScyllaCluster.yaml
 else
   kubectl -n ${scyllaNamespace} apply -f ${scyllaNamespace}.ScyllaCluster.yaml
 fi
 
+[[ -e gcs-service-account.json && ${context} == *gke* ]] && kubectl annotate serviceaccount --namespace scylla-dc1 scylla-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite  
+
 # wait
-waitPeriod="600s"
 printf "Waiting for ScyllaCluster/scylla resources to be ready within ${waitPeriod} \n" 
 sleep 5 
 kubectl -n ${scyllaNamespace} wait ScyllaCluster/scylla --for=condition=Available=True --timeout=${waitPeriod}
 
-[[ ${context} == *eks* ]] && defaultStorageClass="gp" || defaultStorageClass="standard"
+# if [[ ${helmEnabled} == false ]]; then
+[[ ${context} == *eks* ]] && defaultStorageClass="gp2" || defaultStorageClass="standard"
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 # Install the monitor resource
-printf "Creating the ScyllaDBMonitoring resources\n"
+printf "Creating the ScyllaDBMonitoring resources for cluster: ${clusterName}\n"
 cat ScyllaDBMonitoringTemplate.yaml | sed \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     -e "s|MONITORCAPACITY|${monitoringCapacity}|g" \
     > ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 kubectl -n ${scyllaNamespace} apply --server-side -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
+# fi
 
 sleep 5
 # patch the configMap to update the grafana.ini file
@@ -170,6 +172,7 @@ kubectl -n ${scyllaNamespace} patch deployment scylla-grafana --type='json' \
         "mountPath": "/var/run/decompressed-configmaps"}, 
         {"name": "scylla-grafana-scylladb-dashboards-scylladb-master", 
         "mountPath": "/var/run/configmaps/grafana-scylladb-dashboards/scylladb-master"}]}]'
+# wait for the grafana deployment to be ready
 kubectl -n ${scyllaNamespace} wait scylladbmonitoring/scylla --for=condition=Available=True --timeout=90s
 username=$( kubectl -n ${scyllaNamespace} get secret/scylla-grafana-admin-credentials --template '{{ index .data "username" }}' | base64 -d )
 password=$( kubectl -n ${scyllaNamespace} get secret/scylla-grafana-admin-credentials --template '{{ index .data "password" }}' | base64 -d )
@@ -197,12 +200,14 @@ cat ${templateFile} | sed \
     -e "s|MANAGERDBCPULIMIT|${managerDbCpuLimit}|g" \
     -e "s|MANAGERDBMEMORYLIMIT|${managerDbMemoryLimit}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
-    > ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
+    > ${scyllaNamespace}.ScyllaManager.yaml
 if [[ ${helmEnabled} == true ]]; then
-  helm install scylla-manager scylla-manager --create-namespace --namespace scylla-manager -f ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
+  helm install scylla-manager scylla/scylla-manager --create-namespace --namespace scylla-manager -f ${scyllaNamespace}.ScyllaManager.yaml
 else
-  kubectl -n scylla-manager apply --server-side -f ${clusterName}-manager-${dataCenterName}.ScyllaManager.yaml
+  kubectl -n scylla-manager apply --server-side -f ${scyllaNamespace}.ScyllaManager.yaml
 fi
+# wait for the scylla-manager deployment to be ready
+kubectl -n scylla-manager wait deployment/scylla-manager --for=condition=Available=True --timeout=${waitPeriod}
 
 # add some permissions to the scylla and scylla-manager service accounts
 kubectl apply --server-side -f role-fix.yaml
