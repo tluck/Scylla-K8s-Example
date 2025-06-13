@@ -10,9 +10,9 @@ spec:
   automaticOrphanedNodeCleanup: true
   #BAK backups:
   #BAK   - name: s3
-  #BAK     location: [s3:scylla-backups]
+  #BAK     location: [s3:AWSBUCKETNAME]
   #GCS   - name: gcs
-  #GCS     location: [gcs:scylla-backups-gke]
+  #GCS     location: [gcs:GCPBUCKETNAME]
   exposeOptions:
     broadcastOptions:
       clients:
@@ -50,6 +50,25 @@ spec:
                       operator: In
                       values:
                         - scylla
+          podAntiAffinity: 
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      app: scylla
+                  matchLabelKeys:
+                    - scylla/datacenter
+                  topologyKey: kubernetes.io/hostname
+          # not supported in ScyllaDB Operator 1.17 
+          # podAntiAffinity:
+          #   requiredDuringSchedulingIgnoredDuringExecution:
+          #     - labelSelector:
+          #         matchLabels:
+          #           app: scylla
+          #         matchLabelKeys:
+          #           - scylla/datacenter
+          #       topologyKey: kubernetes.io/hostname
           tolerations:
             - effect: NoSchedule
               key: scylla-operator.scylladb.com/dedicated

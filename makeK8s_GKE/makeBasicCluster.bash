@@ -42,6 +42,9 @@ gcloud container clusters ${verb} ${clusterName} --${gkeLocation}="${!gkeLocatio
   --no-enable-autoupgrade \
   --no-enable-autorepair
 set +x
+#  --node-labels='scylla.scylladb.com/node-type=scylla' \
+#  --node-taints='scylla-operator.scylladb.com/dedicated=scyllaclusters:NoSchedule'
+
 #    --cluster-dns="clouddns" \
 #    --cluster-dns-scope="vpc" \
 #    --cluster-dns-domain="${domain}" \

@@ -45,6 +45,9 @@ if [[ -e gcs-service-account.json && ${context} == *gke* ]]; then
     --from-file=gcs-service-account.json=gcs-service-account.json
 fi
 
+# not used with IAM
+#eval $(cat ~/.aws/credentials|grep access|sed -e 's/ //g' -e 's/aws_access_key_id/export AWS_ACCESS_KEY_ID/' -e 's/aws_secret_access_key/export AWS_SECRET_ACCESS_KEY/')
+
 kubectl -n ${scyllaNamespace} delete secret scylla-agent-config-secret > /dev/null 2>&1
 printf "Creating a secret to define the backup location\n"
 kubectl -n ${scyllaNamespace} apply --server-side -f - <<EOF
@@ -56,11 +59,16 @@ type: Opaque
 data:
   scylla-manager-agent.yaml: $(echo -n \
 "s3:
-  access_key_id: minio
-  secret_access_key: minio123
-  provider: Minio
-  endpoint: http://minio.minio:9000
-  no_check_bucket: true
+  ${minio}access_key_id: minio
+  ${minio}secret_access_key: minio123
+  ${minio}provider: Minio
+  ${minio}endpoint: http://minio.minio:9000
+  ${minio}no_check_bucket: true
+  ${awss3}# access_key_id: ${AWS_ACCESS_KEY_ID}
+  ${awss3}# secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+  ${awss3}provider: AWS
+  ${awss3}endpoint: https://s3.${awsBucketRegion}.amazonaws.com
+  ${awss3}region: ${awsBucketRegion}
 ${gcs}gcs:
 ${gcs}  service_account_file: /etc/scylla-manager-agent/gcs-service-account.json
 " | base64 | tr -d '\n')
@@ -127,6 +135,8 @@ cat ${templateFile} | sed \
     -e "s|CAPACITY|${dbCapacity}|g" \
     -e "s|CPULIMIT|${dbCpuLimit}|g" \
     -e "s|MEMORYLIMIT|${dbMemoryLimit}|g" \
+    -e "s|AWSBUCKETNAME|${awsBucketName}|g" \
+    -e "s|GCPBUCKETNAME|${gcpBucketName}|g" \
     -e "s|#BAK |${bak}|g" \
     -e "s|#GCS |${gcs}|g" \
     -e "s|#MDC |${mdc}|g" \
