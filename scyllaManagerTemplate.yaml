@@ -131,6 +131,14 @@ data:
     database:
       hosts:
       - scylla-manager-DATACENTER-rack1-0
+      # ssl: true
+    ssl:
+      cert_file: /var/run/configmaps/scylla-manager/client-certs/ca.crt
+      user_cert_file: /var/run/secrets/scylla-manager/client-certs/tls.crt
+      user_key_file: /var/run/secrets/scylla-manager/client-certs/tls.key
+      # cert_file: /var/run/configmaps/scylla-manager/client-ca/ca-bundle.crt
+      # user_cert_file: /var/run/secrets/scylla-manager/user-admin/tls.crt
+      # user_key_file: /var/run/secrets/scylla-manager/user-admin/tls.key
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -286,20 +294,53 @@ spec:
           limits:
             cpu: 100m
             memory: 200Mi
-        volumeMounts:
-        - mountPath: /mnt/etc/scylla-manager
-          name: scylla-manager-config
         readinessProbe:
           httpGet:
             path: /api/v1/clusters
             port: 5080
           periodSeconds: 10
           timeoutSeconds: 3
-      volumes:
-      - configMap:
-          name: scylla-manager-config
-        name: scylla-manager-config
 
+        volumeMounts:
+        - name: scylla-manager-config
+          mountPath: /mnt/etc/scylla-manager
+        - name: scylla-manager-serving-ca
+          readOnly: true
+          mountPath: /var/run/configmaps/scylla-manager/serving-ca
+        - name: scylla-manager-client-ca
+          readOnly: true
+          mountPath: /var/run/configmaps/scylla-manager/client-ca
+        - name: local-serving-certs
+          readOnly: true
+          mountPath: /var/run/secrets/scylla-manager/serving-certs
+        - name: local-user-admin
+          readOnly: true
+          mountPath: /var/run/secrets/scylla-manager/user-admin
+        - name: scylla-manager-client
+          readOnly: true
+          mountPath: /var/run/secrets/scylla-manager/client-certs
+
+      volumes:
+      - name: scylla-manager-config
+        configMap:
+          name: scylla-manager-config
+      - name: scylla-manager-serving-ca
+        configMap:
+          name: scylla-manager-local-serving-ca
+          defaultMode: 420
+      - name: scylla-manager-client-ca
+        configMap:
+          name: scylla-manager-local-client-ca
+          defaultMode: 420
+      - name: local-serving-certs
+        secret:
+          secretName: scylla-manager-local-serving-certs
+      - name: local-user-admin
+        secret:
+          secretName: scylla-manager-local-user-admin
+      - name: scylla-manager-client 
+        secret:
+          secretName: scylla-manager-certs
 ---
 apiVersion: scylla.scylladb.com/v1
 kind: ScyllaCluster
@@ -336,8 +377,8 @@ spec:
           value: scyllaclusters
       resources:
         requests:
-          cpu: 100m
-          memory: 200Mi
+          cpu: MANAGERDBCPULIMIT
+          memory: 100Mi
         limits:
           cpu: MANAGERDBCPULIMIT
           memory: MANAGERDBMEMORYLIMIT

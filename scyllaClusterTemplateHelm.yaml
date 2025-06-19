@@ -63,7 +63,7 @@ racks:
     # Scylla container resource definition
     resources:
       requests:
-        cpu: 500m
+        cpu: CPULIMIT
         memory: 100Mi
       limits:
         cpu: CPULIMIT

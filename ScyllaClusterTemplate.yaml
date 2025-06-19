@@ -36,7 +36,7 @@ spec:
           storageClassName: scylladb-local-xfs
         resources:
           requests:
-            cpu: 500m
+            cpu: CPULIMIT
             memory: 100Mi
           limits:
             cpu: CPULIMIT
@@ -78,9 +78,13 @@ spec:
           # - name: tls-certificates
           #   secret:
           #     secretName: scylla-server-certs # Reference the secret containing certificates.
-          - name: scylladb-serving-ca
-            configMap:
-              name: scylla-local-serving-ca
+          # - name: scylladb-serving-ca
+          #   configMap:
+          #     name: scylla-local-serving-ca
+          #     defaultMode: 420
+          - name: scylla-server-certs
+            secret:
+              secretName: scylla-server-certs
               defaultMode: 420
         #GCS   - name: gcs-service-account
         #GCS     secret:
@@ -88,9 +92,12 @@ spec:
         volumeMounts:
           # - name: tls-certificates
           #   mountPath: /etc/scylla/certs # Mount path inside the pod.
-          - name: scylladb-serving-ca
+          # - name: scylladb-serving-ca
+          #   readOnly: true
+          #   mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+          - name: scylla-server-certs
             readOnly: true
-            mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+            mountPath: /var/run/secrets/scylla-server-certs/
         #GCS agentVolumeMounts:
         #GCS   - name: gcs-service-account
         #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
