@@ -7,11 +7,11 @@ if [[ ${1} == '-d' ]]; then
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 if [[ ${helmEnabled} == true ]]; then
-  helm uninstall scylla --namespace ${scyllaNamespace}
-  helm uninstall scylla-manager  --namespace scylla-manager 
+  helm uninstall scylla          --namespace ${scyllaNamespace}
+  helm uninstall scylla-manager  --namespace ${scyllaManagerNamespace}
 else
-  kubectl -n ${scyllaNamespace} delete -f ${scyllaNamespace}.ScyllaCluster.yaml
-  kubectl -n scylla-manager     delete -f ${scyllaNamespace}.ScyllaManager.yaml
+  kubectl -n ${scyllaNamespace}        delete -f ${scyllaNamespace}.ScyllaCluster.yaml
+  kubectl -n ${scyllaManagerNamespace} delete -f ${scyllaNamespace}.ScyllaManager.yaml
 fi
 # delete the cluster monitoring resource
 kubectl -n ${scyllaNamespace} delete -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
@@ -76,6 +76,42 @@ EOF
 
 fi # end of backupEnabled
 
+# make certs for Scylla using the new cert-manager
+kubectl -n ${scyllaNamespace} apply --server-side -f=- <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: scylla-server-certs
+spec:
+  secretName: scylla-server-certs # Secret where the certificate will be stored.
+  duration: 2160h # Validity period (90 days).
+  renewBefore: 360h # Renew before expiry (15 days).
+  commonName: cassandra
+  dnsNames:
+    - ${scyllaNamespace}-rack1-0.${scyllaNamespace}.svc
+    - ${scyllaNamespace}-rack1-1.${scyllaNamespace}.svc
+    - ${scyllaNamespace}-rack1-2.${scyllaNamespace}.svc
+    - scylla-client.${scyllaNamespace}.svc
+    - scylla-client
+  issuerRef:
+    name: myclusterissuer
+    kind: ClusterIssuer
+  usages:
+    - "digital signature"    # Required for TLS handshake
+    - "key encipherment"     # Required for key exchange
+    - "server auth"
+    - "client auth"
+EOF
+
+if [[ ${mTLS} == true ]] ; then
+  passAuth="# "
+  certAuth=""
+  printf "Using mTLS certificate authentication for Scylla\n"
+else
+  passAuth=""
+  certAuth="# "
+  printf "Using username/password authentication for Scylla\n"
+fi 
 # create a configMap to define Scylla options
 kubectl -n ${scyllaNamespace} delete configmap scylla-config > /dev/null 2>&1
 if [[ ${enableSecurity} == true && ${helmEnabled} == false ]]; then
@@ -87,26 +123,35 @@ metadata:
   name: scylla-config
 data:
   scylla.yaml: |
-    authenticator: PasswordAuthenticator
+    # native_transport_port: 9042
+    # native_transport_port_ssl: 9142
     authorizer: CassandraAuthorizer
+    ${passAuth}authenticator: PasswordAuthenticator
+    ${certAuth}authenticator: com.scylladb.auth.CertificateAuthenticator
+    auth_certificate_role_queries:
+      - source: SUBJECT
+        query: CN\s*=\s*([^,\s]+)
+      - source: ALTNAME
+        query: DNS:([^,\s]+)
     # # Other options
     client_encryption_options:
       enabled: true
-      certificate: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.crt
-      keyfile: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.key
-      truststore: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca/ca-bundle.crt
-      # certificate: /etc/scylla/certs/tls.crt
-      # keyfile: /etc/scylla/certs/tls.key
-      # truststore: /etc/scylla/certs/ca.crt
+      ${certAuth}require_client_auth: true
+      # certificate: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.crt
+      # keyfile: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.key
+      # truststore: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca/ca-bundle.crt
+      certificate: /var/run/secrets/scylla-server-certs/tls.crt
+      keyfile:     /var/run/secrets/scylla-server-certs/tls.key
+      truststore:  /var/run/secrets/scylla-server-certs/ca.crt
     server_encryption_options:
       enabled: true
       internode_encryption: all # none, all, dc, rack
-      certificate: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.crt
-      keyfile: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.key
-      truststore: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca/ca-bundle.crt
-      # certificate: /etc/scylla/certs/tls.crt
-      # keyfile: /etc/scylla/certs/tls.key
-      # truststore: /etc/scylla/certs/ca.crt
+      # certificate: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.crt
+      # keyfile: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.key
+      # truststore: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca/ca-bundle.crt
+      certificate: /var/run/secrets/scylla-server-certs/tls.crt
+      keyfile:     /var/run/secrets/scylla-server-certs/tls.key
+      truststore:  /var/run/secrets/scylla-server-certs/ca.crt
 EOF
 printf "Using the Scylla server certificates issued by the cert-manager with Operator\n"
 
@@ -147,7 +192,7 @@ else
   kubectl -n ${scyllaNamespace} apply -f ${scyllaNamespace}.ScyllaCluster.yaml
 fi
 
-[[ -e gcs-service-account.json && ${context} == *gke* ]] && kubectl annotate serviceaccount --namespace scylla-dc1 scylla-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite  
+[[ -e gcs-service-account.json && ${context} == *gke* ]] && kubectl annotate serviceaccount --namespace ${scyllaNamespace} scylla-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite  
 
 # wait
 printf "Waiting for ScyllaCluster/scylla resources to be ready within ${waitPeriod} \n" 
@@ -197,6 +242,32 @@ else
   printf "Creating the ScyllaManager resources via Kubectl\n"
   templateFile="ScyllaManagerTemplate.yaml"
 fi
+kubectl create ns ${scyllaManagerNamespace} || true
+
+# make certs for Scylla Manager using the new cert-manager
+kubectl -n ${scyllaManagerNamespace} apply --server-side -f=- <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: scylla-manager-certs
+  namespace: ${scyllaManagerNamespace}
+spec:
+  secretName: scylla-manager-certs
+  issuerRef:
+    name: myclusterissuer
+    kind: ClusterIssuer
+  commonName: cassandra
+  dnsNames:
+    - "*.${scyllaManagerNamespace}.svc"
+    - "*.${scyllaManagerNamespace}.svc.cluster.local"
+  usages:
+    - "digital signature"    # Required for TLS handshake
+    - "key encipherment"     # Required for key exchange
+    - "server auth"
+    - "client auth"
+EOF
+
+kubectl -n ${scyllaManagerNamespace} delete configmap scylla-manager-config > /dev/null 2>&1
 cat ${templateFile} | sed \
     -e "s|DBVERSION|${dbVersion}|g" \
     -e "s|DEVMODE|${developerMode}|g" \
@@ -212,12 +283,12 @@ cat ${templateFile} | sed \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     > ${scyllaNamespace}.ScyllaManager.yaml
 if [[ ${helmEnabled} == true ]]; then
-  helm install scylla-manager scylla/scylla-manager --create-namespace --namespace scylla-manager -f ${scyllaNamespace}.ScyllaManager.yaml
+  helm install scylla-manager scylla/scylla-manager --create-namespace --namespace ${scyllaManagerNamespace} -f ${scyllaNamespace}.ScyllaManager.yaml
 else
-  kubectl -n scylla-manager apply --server-side -f ${scyllaNamespace}.ScyllaManager.yaml
+  kubectl -n ${scyllaManagerNamespace} apply --server-side -f ${scyllaNamespace}.ScyllaManager.yaml
 fi
 # wait for the scylla-manager deployment to be ready
-kubectl -n scylla-manager wait deployment/scylla-manager --for=condition=Available=True --timeout=${waitPeriod}
+kubectl -n ${scyllaManagerNamespace} wait deployment/scylla-manager --for=condition=Available=True --timeout=${waitPeriod}
 
 # add some permissions to the scylla and scylla-manager service accounts
 kubectl apply --server-side -f role-fix.yaml

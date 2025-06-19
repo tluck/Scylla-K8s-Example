@@ -79,10 +79,10 @@ scylla:
         storageClassName: "STORAGECLASS" # use default storage class"
       resources:
         requests:
-          cpu: 200m
+          cpu: MANAGERDBCPULIMIT
           memory: 200Mi
         limits:
-          cpu: MANAGERDBCPULIMIT # 2
+          cpu: MANAGERDBCPULIMIT
           memory: MANAGERDBMEMORYLIMIT # 2Gi
       placement:
         nodeAffinity:

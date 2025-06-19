@@ -43,16 +43,36 @@ printf "\n%s\n" '---------------------------------------------------------------
 printf "Installing the cert manager\n"
 helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set crds.enabled=true
 
-# # setup the issuer for scylla #scylla-cert-issuer.yaml
-# kubectl apply -f=- <<EOF
-# apiVersion: cert-manager.io/v1
-# kind: ClusterIssuer
-# metadata:
-#   name: selfsigned-issuer
-#   namespace: ${scyllaNamespace}
-# spec:
-#   selfSigned: {}
-# EOF
+## fix to create proper certs with a subject.
+issuerNamespace="cert-manager"
+issuerName="myclusterissuer"
+printf "%s\n" "Waiting for the cert-manager ..."
+# Create an issuer from the CA secret
+code=1
+n=0
+while [ $code -eq 1 ]
+do
+sleep 20
+kubectl delete ClusterIssuer/${issuerName} > /dev/null 2>&1
+cat <<EOF | kubectl apply -f - > /dev/null 2>&1
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: ${issuerName}
+  namespace: ${issuerNamespace}
+spec:
+  ca:
+    secretName: cert-manager-webhook-ca #ca-key-pair
+EOF
+code=$?
+n=$((n+1))
+if [[ "$n" > 20 ]] 
+then
+    printf "%s\n" "* * * Error - Launching Cert Issuer"
+    exit 1
+fi
+done
+printf "... Done.\n"
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Installing the prometheus-operator via Helm\n"

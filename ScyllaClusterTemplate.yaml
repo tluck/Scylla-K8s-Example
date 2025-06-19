@@ -13,6 +13,13 @@ spec:
   #BAK     location: [s3:AWSBUCKETNAME]
   #GCS   - name: gcs
   #GCS     location: [gcs:GCPBUCKETNAME]
+  repairs:
+    - name: weekly-repair
+      cron: "0 0 * * 0" # Every Sunday at midnight       
+      dc: ["DATACENTER"] # Specify the datacenter to run the repair in
+      keyspace: ["*"]  # All keyspaces
+      intensity: "1"
+      parallel: 0
   exposeOptions:
     broadcastOptions:
       clients:
@@ -21,7 +28,7 @@ spec:
         type: PodIP
     nodeService:
       type: Headless
-  cpuset: false
+  # cpuset: true # deprecated
   sysctls:
     - fs.aio-max-nr=30000000
   #MDC externalSeeds:
@@ -36,7 +43,7 @@ spec:
           storageClassName: scylladb-local-xfs
         resources:
           requests:
-            cpu: 500m
+            cpu: CPULIMIT
             memory: 100Mi
           limits:
             cpu: CPULIMIT
@@ -78,9 +85,13 @@ spec:
           # - name: tls-certificates
           #   secret:
           #     secretName: scylla-server-certs # Reference the secret containing certificates.
-          - name: scylladb-serving-ca
-            configMap:
-              name: scylla-local-serving-ca
+          # - name: scylladb-serving-ca
+          #   configMap:
+          #     name: scylla-local-serving-ca
+          #     defaultMode: 420
+          - name: scylla-server-certs
+            secret:
+              secretName: scylla-server-certs
               defaultMode: 420
         #GCS   - name: gcs-service-account
         #GCS     secret:
@@ -88,9 +99,12 @@ spec:
         volumeMounts:
           # - name: tls-certificates
           #   mountPath: /etc/scylla/certs # Mount path inside the pod.
-          - name: scylladb-serving-ca
+          # - name: scylladb-serving-ca
+          #   readOnly: true
+          #   mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+          - name: scylla-server-certs
             readOnly: true
-            mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+            mountPath: /var/run/secrets/scylla-server-certs/
         #GCS agentVolumeMounts:
         #GCS   - name: gcs-service-account
         #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
