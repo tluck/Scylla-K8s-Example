@@ -64,10 +64,17 @@ racks:
     resources:
       requests:
         cpu: CPULIMIT
-        memory: 100Mi
+        memory: MEMORYLIMIT
       limits:
         cpu: CPULIMIT
         memory: MEMORYLIMIT
+    agentResources:      # For ScyllaDB Agent container
+      requests:
+        cpu: "100m"
+        memory: "100Mi"
+      limits:
+        cpu: "100m"
+        memory: "100Mi"
     placement:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:

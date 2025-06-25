@@ -25,5 +25,5 @@ else
 fi
 
 # make a backup
-printf "Makeing a backup to ${location}\n"
-kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c scylla-dc1/scylla -L ${location}
+printf "Making a backup of cluster: ${scyllaNamespace}/${clusterName} to ${location}\n"
+kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${scyllaNamespace}/${clusterName} -L ${location}

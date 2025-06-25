@@ -9,7 +9,7 @@ spec:
       type: RAID0
       RAID0:
         devices:
-          modelRegex: Amazon EC2 NVMe Instance Storage
+          #AWS modelRegex: Amazon EC2 NVMe Instance Storage
           nameRegex: ^/dev/nvme\d+n\d+$
     filesystems:
     - device: /dev/md/nvmes

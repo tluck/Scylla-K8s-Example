@@ -82,6 +82,10 @@ helm install monitoring prometheus-community/kube-prometheus-stack --create-name
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Installing the scylla-operator via Helm\n"
 # Install Scylla Operator
+cat scyllaOperatorTemplate.yaml | sed \
+    -e "s|REPOSITORY|${operatorRepository}|g" \
+    -e "s|IMAGETAG|${operatorTag}|g" \
+    > scylla-operator.yaml
 helm install scylla-operator scylla/scylla-operator --create-namespace --namespace scylla-operator -f scylla-operator.yaml
 
 # wait

@@ -77,6 +77,7 @@ EOF
 fi # end of backupEnabled
 
 # make certs for Scylla using the new cert-manager
+# note: the first DNS name is the commonName for role mapping, the rest are SANs
 kubectl -n ${scyllaNamespace} apply --server-side -f=- <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -88,6 +89,7 @@ spec:
   renewBefore: 360h # Renew before expiry (15 days).
   commonName: cassandra
   dnsNames:
+    - cassandra
     - ${scyllaNamespace}-rack1-0.${scyllaNamespace}.svc
     - ${scyllaNamespace}-rack1-1.${scyllaNamespace}.svc
     - ${scyllaNamespace}-rack1-2.${scyllaNamespace}.svc
@@ -129,10 +131,10 @@ data:
     ${passAuth}authenticator: PasswordAuthenticator
     ${certAuth}authenticator: com.scylladb.auth.CertificateAuthenticator
     auth_certificate_role_queries:
-      - source: SUBJECT
-        query: CN\s*=\s*([^,\s]+)
       - source: ALTNAME
-        query: DNS:([^,\s]+)
+        query: DNS=([^,\s]+)
+      # - source: SUBJECT
+      #   query: CN\s*=\s*([^,\s]+)
     # # Other options
     client_encryption_options:
       enabled: true
@@ -153,7 +155,6 @@ data:
       keyfile:     /var/run/secrets/scylla-server-certs/tls.key
       truststore:  /var/run/secrets/scylla-server-certs/ca.crt
 EOF
-printf "Using the Scylla server certificates issued by the cert-manager with Operator\n"
 
 # # Generate the server certificate using the cert-issuer 
 # kubectl -n ${scyllaNamespace} delete Certificate scylla-server-certs > /dev/null 2>&1
@@ -245,6 +246,7 @@ fi
 kubectl create ns ${scyllaManagerNamespace} || true
 
 # make certs for Scylla Manager using the new cert-manager
+# note: the first DNS name is the commonName for role mapping, the rest are SANs
 kubectl -n ${scyllaManagerNamespace} apply --server-side -f=- <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -258,6 +260,7 @@ spec:
     kind: ClusterIssuer
   commonName: cassandra
   dnsNames:
+    - "cassandra"
     - "*.${scyllaManagerNamespace}.svc"
     - "*.${scyllaManagerNamespace}.svc.cluster.local"
   usages:
