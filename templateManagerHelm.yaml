@@ -80,7 +80,7 @@ scylla:
       resources:
         requests:
           cpu: MANAGERDBCPULIMIT
-          memory: 200Mi
+          memory: MANAGERDBMEMORYLIMIT
         limits:
           cpu: MANAGERDBCPULIMIT
           memory: MANAGERDBMEMORYLIMIT # 2Gi

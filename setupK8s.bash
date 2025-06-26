@@ -27,8 +27,8 @@ else
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Import/Update Helm Repos\n"
+helm repo add scylla              	https://scylla-operator-charts.storage.googleapis.com/latest
 helm repo add jetstack            	https://charts.jetstack.io                                  
-helm repo add scylla              	https://scylla-operator-charts.storage.googleapis.com/stable
 helm repo add prometheus-community	https://prometheus-community.github.io/helm-charts          
 helm repo add minio-operator      	https://operator.min.io    
 helm repo update
@@ -82,7 +82,7 @@ helm install monitoring prometheus-community/kube-prometheus-stack --create-name
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Installing the scylla-operator via Helm\n"
 # Install Scylla Operator
-cat scyllaOperatorTemplate.yaml | sed \
+cat templateOperator.yaml | sed \
     -e "s|REPOSITORY|${operatorRepository}|g" \
     -e "s|IMAGETAG|${operatorTag}|g" \
     > scylla-operator.yaml

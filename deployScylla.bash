@@ -3,6 +3,7 @@
 date
 [[ -e init.conf ]] && source init.conf
 
+[[ ${1} == '-c' ]] && clusterOnly=true
 if [[ ${1} == '-d' ]]; then
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
@@ -130,11 +131,11 @@ data:
     authorizer: CassandraAuthorizer
     ${passAuth}authenticator: PasswordAuthenticator
     ${certAuth}authenticator: com.scylladb.auth.CertificateAuthenticator
-    auth_certificate_role_queries:
-      - source: ALTNAME
-        query: DNS=([^,\s]+)
-      # - source: SUBJECT
-      #   query: CN\s*=\s*([^,\s]+)
+    ${certAuth}auth_certificate_role_queries:
+    ${certAuth}  - source: ALTNAME
+    ${certAuth}    query: DNS=([^,\s]+)
+    ${certAuth}  - source: SUBJECT
+    ${certAuth}     query: CN\s*=\s*([^,\s]+)
     # # Other options
     client_encryption_options:
       enabled: true
@@ -165,10 +166,10 @@ fi
 
 if [[ ${helmEnabled} == true ]]; then
   printf "Creating the ScyllaCluster resource via Helm\n"
-  templateFile="ScyllaClusterTemplateHelm.yaml"
+  templateFile="templateClusterHelm.yaml"
 else
   printf "Creating the ScyllaCluster resource via Kubectl\n"
-  templateFile="ScyllaClusterTemplate.yaml"
+  templateFile="templateCluster.yaml"
 fi
 [[ ${dataCenterName} != "dc1" ]] && mdc="" || mdc="#MDC "
 cat ${templateFile} | sed \
@@ -200,12 +201,18 @@ printf "Waiting for ScyllaCluster/scylla resources to be ready within ${waitPeri
 sleep 5 
 kubectl -n ${scyllaNamespace} wait ScyllaCluster/scylla --for=condition=Available=True --timeout=${waitPeriod}
 
+if [[ ${clusterOnly} == true ]]; then
+  printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+  printf "Scylla Cluster resources created successfully.\n"
+  exit 0
+fi
+
 # if [[ ${helmEnabled} == false ]]; then
 [[ ${context} == *eks* ]] && defaultStorageClass="gp2" || defaultStorageClass="standard"
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 # Install the monitor resource
 printf "Creating the ScyllaDBMonitoring resources for cluster: ${clusterName}\n"
-cat ScyllaDBMonitoringTemplate.yaml | sed \
+cat templateDBMonitoring.yaml | sed \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     -e "s|MONITORCAPACITY|${monitoringCapacity}|g" \
@@ -238,10 +245,10 @@ printf "\n%s\n" '---------------------------------------------------------------
 # Install Scylla Manager
 if [[ ${helmEnabled} == true ]]; then
   printf "Creating the ScyllaManager resources via Helm\n"
-  templateFile="ScyllaManagerTemplateHelm.yaml"
+  templateFile="templateManagerHelm.yaml"
 else
   printf "Creating the ScyllaManager resources via Kubectl\n"
-  templateFile="ScyllaManagerTemplate.yaml"
+  templateFile="templateManager.yaml"
 fi
 kubectl create ns ${scyllaManagerNamespace} || true
 

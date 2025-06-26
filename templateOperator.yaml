@@ -6,7 +6,7 @@ replicas: 1
 # Allows to customize Scylla Operator image
 image:
   repository: "REPOSITORY" # scylladb
-  pullPolicy: IfNotPresent
+  pullPolicy: "Always" #IfNotPresent - if using latest always is best! 
   # Overrides the image tag whose default is the chart appVersion.
   tag: "IMAGETAG" # "latest"
 

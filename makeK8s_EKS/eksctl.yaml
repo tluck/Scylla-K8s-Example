@@ -1,21 +1,21 @@
 apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 metadata:
-  name: tjl-basic
+  name: tjl-eks-scylla
   region: us-west-2
   version: "1.32"
 
 availabilityZones:
-- us-west-2a
-# - us-west-2b
+  - us-west-2a
+  - us-west-2b
 # - us-west-2c
 
 iam:
-  withOIDC: false
+  withOIDC: true
 
-managedNodeGroups:
+nodeGroups:
   - name: scylla-pool
-    instanceType: i4i.large # m5a.2xlarge
+    instanceType: i4i.8xlarge # m5a.2xlarge
     desiredCapacity: 3
     minSize: 3
     maxSize: 3
@@ -35,8 +35,23 @@ managedNodeGroups:
     iam:
       withAddonPolicies:
         ebs: true
+    kubeletExtraConfig:
+      cpuManagerPolicy: static
+      # kubeReserved:
+      #   cpu: "300m"
+      #   memory: "300Mi"
+      #   ephemeral-storage: "1Gi"
+      # systemReserved:
+      #   cpu: "300m"
+      #   memory: "300Mi"
+      #   ephemeral-storage: "1Gi"
+      # evictionHard:
+      #   memory.available: "200Mi"
+      #   nodefs.available: "10%"
+      # featureGates:
+      #   RotateKubeletServerCertificate: true
 
 addons:
-- name: aws-ebs-csi-driver
-  wellKnownPolicies:      # add IAM and service account
-    ebsCSIController: true
+  - name: aws-ebs-csi-driver
+    wellKnownPolicies:      # add IAM and service account
+      ebsCSIController: true

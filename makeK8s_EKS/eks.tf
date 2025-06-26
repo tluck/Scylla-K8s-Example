@@ -59,6 +59,10 @@ resource "aws_key_pair" "key_pair" {
   public_key = file(var.ssh_public_key_file)
 }
 
+data "aws_ssm_parameter" "eks_ami" {
+  name = "/aws/service/eks/optimized-ami/${var.eks_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
+}
+
 # Get the security group ID from the cluster configuration
 locals {
   #eks_security_group_id = module.eks.vpc_config[0].cluster_security_group_id
@@ -122,7 +126,7 @@ module "eks" {
       description = "SSH"
       from_port   = 22
       to_port     = 22
-      protocol    = "TCP"
+      protocol    = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }
 
@@ -131,7 +135,7 @@ module "eks" {
       description = "HTTPS"
       from_port   = 443
       to_port     = 443
-      protocol    = "TCP"
+      protocol    = "tcp"
       cidr_blocks = ["172.31.0.0/16"]
     }
 
@@ -140,16 +144,16 @@ module "eks" {
     #   description = "Workers"
     #   from_port   = 28000
     #   to_port     = 29999
-    #   protocol    = "TCP"
+    #   protocol    = "tcp"
     #   cidr_blocks = ["0.0.0.0/0"]
     # }
-    
+
     ingress_allow_webhook = {
       type        = "ingress"
-      description = "webhook"
+      description = "Webhook"
       from_port   = 5000
       to_port     = 5000
-      protocol    = "TCP"
+      protocol    = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }
 
@@ -158,7 +162,7 @@ module "eks" {
       description = "Prometheus"
       from_port   = 9090
       to_port     = 9090
-      protocol    = "TCP"
+      protocol    = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }
 
@@ -167,11 +171,10 @@ module "eks" {
       description = "Grafana"
       from_port   = 3000
       to_port     = 3000
-      protocol    = "TCP"
+      protocol    = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }
   }
-
   eks_managed_node_groups = {
     eks_node_group_0 = {
       name                       = "${module.eks.cluster_name}-0"
@@ -179,7 +182,7 @@ module "eks" {
       instance_types             = [local.instance_type0]
       capacity_type              = "SPOT"
       key_name                   = aws_key_pair.key_pair.key_name
-      subnet_ids                 = [data.aws_subnets.existing_subnets.ids[1]]
+      subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
       desired_size               = var.ng_0_size
       min_size                   = 3
       max_size                   = 6 #var.ng_0_size
@@ -188,6 +191,8 @@ module "eks" {
       use_custom_launch_template = true
       launch_template_id         = aws_launch_template.group_lt_0.id
       launch_template_version    = "$Latest"
+      # Critical: Set CPU manager policy via bootstrap args
+      bootstrap_extra_args = "--kubelet-extra-args '--cpu-manager-policy=static'"
 
       iam_role_additional_policies = {
         AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
@@ -195,7 +200,33 @@ module "eks" {
         tjl-nodegroup-scylla-pool-PolicyEBS      = "arn:aws:iam::403205517060:policy/tjl-nodegroup-scylla-pool-PolicyEBS"
         # AmazonS3FullAccess       = "arn:aws:iam::aws:policy/AmazonS3FullAccess"  # For S3 CSI
       }
-    },
+    }
+  # eks_managed_node_groups = {
+  #   eks_node_group_0 = {
+  #     name                       = "${module.eks.cluster_name}-0"
+  #     ami_type                   = "AL2023_x86_64_STANDARD"
+  #     instance_types             = [local.instance_type0]
+  #     capacity_type              = "SPOT"
+  #     key_name                   = aws_key_pair.key_pair.key_name
+  #     subnet_ids                 = [data.aws_subnets.existing_subnets.ids[1]]
+  #     desired_size               = var.ng_0_size
+  #     min_size                   = 3
+  #     max_size                   = 6 #var.ng_0_size
+  #     # iam_role_attach_cni_policy = true
+  #     create_launch_template     = false
+  #     use_custom_launch_template = true
+  #     launch_template_id         = aws_launch_template.group_lt_0.id
+  #     launch_template_version    = "$Latest"
+  #     # Critical: Set CPU manager policy via bootstrap args
+  #     # bootstrap_extra_args = "--kubelet-extra-args '--cpu-manager-policy=static'"
+
+  #     iam_role_additional_policies = {
+  #       AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+  #       AmazonEC2FullAccess      = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+  #       tjl-nodegroup-scylla-pool-PolicyEBS      = "arn:aws:iam::403205517060:policy/tjl-nodegroup-scylla-pool-PolicyEBS"
+  #       # AmazonS3FullAccess       = "arn:aws:iam::aws:policy/AmazonS3FullAccess"  # For S3 CSI
+  #     }
+  #   },
 
     # eks_node_group_1 = {
     #   name                       = "${module.eks.cluster_name}-1"
@@ -218,11 +249,10 @@ module "eks" {
 
 resource "aws_launch_template" "group_lt_0" {
   name          = "${var.prefix}group-eks-launch-template-0"
-  # image_id      = "ami-08964567921c4211b" # Replace with the appropriate Amazon Linux AMI ID
-  # instance_type = local.instance_type #5.4xlarge"
+  # image_id      = data.aws_ssm_parameter.eks_ami.value
+  # instance_type = local.instance_type0 #5.4xlarge"
   # Specify the SSH key
   key_name = aws_key_pair.key_pair.key_name # Replace with your SSH key pair name
-  # Specify the disk size
   block_device_mappings {
     device_name = "/dev/xvda"
     ebs {
@@ -230,6 +260,11 @@ resource "aws_launch_template" "group_lt_0" {
       volume_type = "gp3"
     }
   }
+  # user_data = base64encode(templatefile("${path.module}/nodeconfig.yaml.tpl", {
+  #   cluster_name    = module.eks.cluster_name
+  #   cluster_endpoint = module.eks.cluster_endpoint
+  #   cluster_ca      = module.eks.cluster_certificate_authority_data
+  # }))
   metadata_options {
     http_tokens = "required"
     http_put_response_hop_limit = 2
@@ -237,6 +272,8 @@ resource "aws_launch_template" "group_lt_0" {
   }
   # Attach EKS security group
   network_interfaces {
+    # device_index         = 0  # Critical: Explicitly set device index
+    # subnet_id            = data.aws_subnets.existing_subnets.ids[0]
     #security_groups = [local.eks_cluster_security_group_id]
     #security_groups = [local.eks_cluster_security_group_id, local.eks_node_security_group_id ]
     security_groups = [local.eks_node_security_group_id ]

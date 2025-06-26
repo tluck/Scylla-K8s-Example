@@ -98,11 +98,14 @@ else
     nodesPublic=(  $( aws --region ${region} ec2 describe-instances --instance-ids ${instanceIds} --query 'Reservations[*].Instances[*].PublicDnsName' --output text ) )
     nodesPrivate=( $( aws --region ${region} ec2 describe-instances --instance-ids ${instanceIds} --query 'Reservations[*].Instances[*].PrivateDnsName' --output text ) )
     nc=0
-    for n in ${nodesPublic[@]}
-    do
-    printf "\tssh -i ${sshKey/pub/pem} ec2-user@${n}\n"
-    nc=$((nc+1))
-    done
+      for n in ${nodesPublic[@]}
+      do
+      printf "\tssh -i ${sshKey/pub/pem} ec2-user@${n}\n"
+      nc=$((nc+1))
+      done
     ngc=$((ngc+1))
     done
+    # run nodeconfig script
+    ./run_nodeconfig.bash
+
 fi

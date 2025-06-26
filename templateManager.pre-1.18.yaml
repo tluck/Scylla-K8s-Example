@@ -378,10 +378,10 @@ spec:
       resources:
         requests:
           cpu: MANAGERDBCPULIMIT
-          memory: 100Mi
+          memory: MANAGERDBMEMORYLIMIT
         limits:
           cpu: MANAGERDBCPULIMIT
-          memory: MANAGERDBMEMORYLIMIT
+          memory: MANAGERDBMEMORYLIMIT 
       storage:
         capacity: MANAGERDBCAPACITY 
         storageClassName: STORAGECLASS #scylladb-local-xfs
