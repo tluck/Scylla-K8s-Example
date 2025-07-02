@@ -1,12 +1,12 @@
 variable "prefix" {
   description = "Unique Name"
   type        = string
-  default     = "tjl-"
+  default     = "test-"
 }
 
 # default and test workspaces:
 locals {
-  cluster_name = "${var.prefix}basic-eks"
+  cluster_name = "${var.prefix}syclla"
   instance_type0 = var.instance0
   instance_type1 = var.instance1
 }
@@ -19,7 +19,7 @@ variable "vpc_id" {
 
 variable "ssh_public_key_file" {
   description = "the existing sshkey to use - assuming the private key is known"
-  default     = "~/.ssh/tluck-aws-us-west-2.pub"
+  default     = "~/.ssh/aws-us-west-2.pub"
 }
 
 variable "region" {
@@ -60,4 +60,10 @@ variable "ebsSize" {
   description = "EBS Disk size"
   type    = number
   default = 100
+}
+
+variable "capacity_type" {
+  description = "capacity type for the node group"
+  type    = string
+  default = "ON_DEMAND" # or SPOT
 }

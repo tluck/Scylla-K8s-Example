@@ -159,7 +159,7 @@ spec:
               - key: scylla.scylladb.com/node-type
                 operator: In
                 values:
-                - scylla
+                - NODESELECTOR
         tolerations:
         - effect: NoSchedule
           key: scylla-operator.scylladb.com/dedicated
@@ -172,6 +172,13 @@ spec:
         limits:
           cpu: MANAGERDBCPULIMIT
           memory: MANAGERDBMEMORYLIMIT
+      agentResources:      # For ScyllaDB Agent container
+        requests:
+          cpu: "100m"
+          memory: "100Mi"
+        limits:
+          cpu: "100m"
+          memory: "100Mi"
       storage:
         capacity: MANAGERDBCAPACITY
         storageClassName: STORAGECLASS

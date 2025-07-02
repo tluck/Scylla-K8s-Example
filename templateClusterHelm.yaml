@@ -83,7 +83,7 @@ racks:
                 - key: scylla.scylladb.com/node-type
                   operator: In
                   values:
-                    - scylla
+                    - NODESELECTOR
       tolerations:
         - effect: NoSchedule
           key: scylla-operator.scylladb.com/dedicated

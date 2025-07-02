@@ -12,11 +12,6 @@ if [[ $1 == "-l" ]]; then
     shift;
 fi
 
-if [[ $1 == "-m" ]]; then
-    mkmount=1
-    shift;
-fi
-
 #instance="${instance0:-m5a.2xlarge}" # "i3en.2xlarge"
 mountPath=${1:-${mountPath}}
 
@@ -31,6 +26,7 @@ else
     terraform output | sed -e's/ = /=/' -e's/\[/(/' -e's/\]/)/' -e's/,$//' 
     else
     terraform apply -auto-approve \
+        -var="capacity_type=${capacityType}" \
         -var=ng_0_size=${nodeGroup0size} \
         -var=ng_1_size=${nodeGroup1size} \
         -var="instance0=${instance0}" \
@@ -39,11 +35,10 @@ else
         -var="prefix=${prefix}" \
         -var="vpc_id=${vpcId}" \
         -var="ssh_public_key_file=${sshKey}"
-        
-    mkmount=1
     fi
     region=$(terraform output -raw region)
     clusterName=$(terraform output -raw eks_cluster_name)
+    printf "Making the kubeconfig for the new cluser\n"
     aws --region ${region} eks update-kubeconfig --name ${clusterName}
     printf "Making gp2 the default storage class\n"
     kubectl patch storageclass gp2 -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
@@ -66,19 +61,6 @@ else
     ssh-keyscan -H $n >> ~/.ssh/known_hosts 2> /dev/null
     kubectl label nodes ${nodesPrivate[$nc]} name=node-${ngc}-${nc} --overwrite=true
     fi
-
-    # if [[ ${mkmount} == 1 ]]; then
-    # # if instance has SSD
-    # workspace=$(terraform workspace show)
-    # if [[ ${workspace} == prod || ${instance0} == *i3* ]]; then
-    #     if [[ ${instance0} == *i3en.3x* ]]; then
-    #     setup_volumes.bash ${n} ./make_nvme_mount.bash ${mountPath} # single disk
-    #     else
-    #     setup_volumes.bash ${n} ./make_stripe.bash ${mountPath}
-    #     fi
-    # fi
-    # #[[ ${mountPath} != "" ]] && ssh -i ${sshKey/pub/pem} ec2-user@${n} sudo rm -rf ${mountPath}
-    # fi
 
     nc=$((nc+1))
     done
@@ -105,7 +87,7 @@ else
       done
     ngc=$((ngc+1))
     done
-    # run nodeconfig script
-    ./run_nodeconfig.bash
+    # this is now configured in the TF script
+    # ./run_nodeconfig.bash
 
 fi

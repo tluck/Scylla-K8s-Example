@@ -26,12 +26,12 @@ spec:
               - key: scylla.scylladb.com/node-type
                 operator: In
                 values:
-                - scylla
-        tolerations:
-        - effect: NoSchedule
-          key: scylla-operator.scylladb.com/dedicated
-          operator: Equal
-          value: scyllaclusters
+                - NODESELECTOR
+        # tolerations:
+        # - effect: NoSchedule
+        #   key: scylla-operator.scylladb.com/dedicated
+        #   operator: Equal
+        #   value: scyllaclusters
     grafana:
       exposeOptions: {}
         # webInterface:

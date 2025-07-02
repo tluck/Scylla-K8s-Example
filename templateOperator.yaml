@@ -18,7 +18,8 @@ resources:
     cpu: 100m
     memory: 20Mi
 # Node selector for Scylla Operator pods
-nodeSelector: { }
+nodeSelector: #{ }
+  scylla.scylladb.com/node-type: NODESELECTOR
 
 # Tolerations for Scylla Operator pods
 tolerations: [ ]
@@ -65,7 +66,8 @@ webhookServerResources:
     memory: 20Mi
 
 # Node selector for Webhook Server pods
-webhookServerNodeSelector: { }
+webhookServerNodeSelector: #{ }
+  scylla.scylladb.com/node-type: NODESELECTOR
 
 # Tolerations for Webhook Server pods
 webhookServerTolerations: [ ]

@@ -84,6 +84,13 @@ scylla:
         limits:
           cpu: MANAGERDBCPULIMIT
           memory: MANAGERDBMEMORYLIMIT # 2Gi
+      agentResources:      # For ScyllaDB Agent container
+        requests:
+          cpu: "100m"
+          memory: "100Mi"
+        limits:
+          cpu: "100m"
+          memory: "100Mi"
       placement:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -92,7 +99,7 @@ scylla:
                   - key: scylla.scylladb.com/node-type
                     operator: In
                     values:
-                      - scylla
+                      - NODESELECTOR
         tolerations:
           - effect: NoSchedule
             key: scylla-operator.scylladb.com/dedicated

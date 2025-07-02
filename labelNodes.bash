@@ -2,6 +2,8 @@
 
 [[ -e init.conf ]] && source init.conf
 
+#ng=<nodegroup_name> # replace with your node group name, e.g., "scylla-nodes"
+##nodes=( $( kubectl get nodes -o json | jq -r --arg ng "$ng" '.items[] | select(.metadata.labels["eks.amazonaws.com/nodegroup"] == $ng | select(.metadata.labels["node-role.kubernetes.io/control-plane"] != "" )' | jq -r '.metadata.name'  ) )
 nodes=( $( kubectl get nodes -o json | jq -r '.items[] | select(.metadata.labels["node-role.kubernetes.io/control-plane"] != "" )' | jq -r '.metadata.name' ))
 num=${#nodes[*]}
 n=0

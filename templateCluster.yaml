@@ -60,7 +60,7 @@ spec:
                     - key: scylla.scylladb.com/node-type
                       operator: In
                       values:
-                        - scylla
+                        - NODESELECTOR
           podAntiAffinity: 
             preferredDuringSchedulingIgnoredDuringExecution:
               - weight: 100

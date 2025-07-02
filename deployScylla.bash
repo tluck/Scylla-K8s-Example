@@ -32,11 +32,11 @@ kubectl create ns ${scyllaNamespace} || true
 # create a secret to define the backup location
 bak="#BAK "
 gcs="#GCS "
-if [[ ${backupEnabled} == true ]]; then
-bak=""
-
 # set developerMode to true for docker-desktop (not actually using XFS)
 [[ ${context} == *docker-desktop* ]] && developerMode="true" || developerMode="false"
+
+if [[ ${backupEnabled} == true ]]; then
+bak=""
 
 # GKE and backup to GCS
 if [[ -e gcs-service-account.json && ${context} == *gke* ]]; then
@@ -187,6 +187,7 @@ cat ${templateFile} | sed \
     -e "s|#BAK |${bak}|g" \
     -e "s|#GCS |${gcs}|g" \
     -e "s|#MDC |${mdc}|g" \
+    -e "s|NODESELECTOR|${nodeSelector0}|g" \
     > ${scyllaNamespace}.ScyllaCluster.yaml
 if [[ ${helmEnabled} == true ]]; then
   helm install scylla scylla/scylla --create-namespace --namespace ${scyllaNamespace} -f ${scyllaNamespace}.ScyllaCluster.yaml
@@ -216,6 +217,7 @@ cat templateDBMonitoring.yaml | sed \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     -e "s|MONITORCAPACITY|${monitoringCapacity}|g" \
+    -e "s|NODESELECTOR|${nodeSelector1}|g" \
     > ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 kubectl -n ${scyllaNamespace} apply --server-side -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 # fi
@@ -291,6 +293,7 @@ cat ${templateFile} | sed \
     -e "s|MANAGERDBCPULIMIT|${managerDbCpuLimit}|g" \
     -e "s|MANAGERDBMEMORYLIMIT|${managerDbMemoryLimit}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
+    -e "s|NODESELECTOR|${nodeSelector1}|g" \
     > ${scyllaNamespace}.ScyllaManager.yaml
 if [[ ${helmEnabled} == true ]]; then
   helm install scylla-manager scylla/scylla-manager --create-namespace --namespace ${scyllaManagerNamespace} -f ${scyllaNamespace}.ScyllaManager.yaml
