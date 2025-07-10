@@ -6,7 +6,7 @@ variable "prefix" {
 
 # default and test workspaces:
 locals {
-  cluster_name = "${var.prefix}syclla"
+  cluster_name = "${var.prefix}scylla"
   instance_type0 = var.instance0
   instance_type1 = var.instance1
 }
@@ -28,15 +28,21 @@ variable "region" {
   default     = "us-west-2"
 }
 
-variable "eks_version" {
-  description = "AWS eks version"
+variable "eks_cluster_version" {
+  description = "AWS eks cluster version"
+  type        = string
+  default     = "1.32"
+}
+
+variable "eks_nodegroup_version" {
+  description = "AWS eks nodegroup version"
   type        = string
   default     = "1.32"
 }
 
 variable "instance0" {
   type    = string
-  default = "m5a.2xlarge" #"i3en.2xlarge"
+  default = "i4i.2xlarge" #"i3en.2xlarge"
 }
 
 variable "instance1" {

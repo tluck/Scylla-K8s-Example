@@ -42,7 +42,8 @@ data "aws_subnets" "existing_subnets" {
 }
 
 data "aws_ssm_parameter" "eks_ami" {
-  name = "/aws/service/eks/optimized-ami/${var.eks_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
+  # name = "/aws/service/eks/optimized-ami/${var.eks_nodegroup_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
+  name = "/aws/service/eks/optimized-ami/${var.eks_nodegroup_version}/amazon-linux-2023/x86_64/standard/recommended/release_version"
 }
 
 # Get the security group ID from the cluster configuration
@@ -76,21 +77,17 @@ module "eks" {
   # version = "20.8.5"
 
   cluster_name                       = local.cluster_name
-  cluster_version                    = var.eks_version
+  cluster_version                    = var.eks_cluster_version
   cluster_endpoint_public_access     = true
   enable_cluster_creator_admin_permissions = true
-  
-  create_kms_key = false  # Prevents automatic KMS key creation
-  cluster_encryption_config = {}  # Remove encryption configuration
-
-  create_cloudwatch_log_group = false  # Lets EKS manage log groups
-  cluster_enabled_log_types = []  # Optional: Disables all log types
-
-  enable_irsa = true  # set false to disable OIDC provider creation
-
-  # vpc_id                             = aws_vpc.existing.id
+  create_kms_key                     = false  # Prevents automatic KMS key creation
+  cluster_encryption_config          = {}  # Remove encryption configuration
+  create_cloudwatch_log_group        = false  # Lets EKS manage log groups
+  cluster_enabled_log_types          = []  # Optional: Disables all log types
+  enable_irsa                        = true  # set false to disable OIDC provider creation
   vpc_id                             = data.aws_vpc.existing_vpc.id
   subnet_ids                         = data.aws_subnets.existing_subnets.ids
+  bootstrap_self_managed_addons      = true
 
   cluster_addons = {
     aws-ebs-csi-driver = {
@@ -175,6 +172,8 @@ module "eks" {
       capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT"
       key_name                   = aws_key_pair.key_pair.key_name
       subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
+      version                    = var.eks_nodegroup_version
+      release_version            = data.aws_ssm_parameter.eks_ami.value
       desired_size               = var.ng_0_size
       min_size                   = var.ng_0_size
       max_size                   = var.ng_0_size
@@ -212,6 +211,8 @@ module "eks" {
       capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT"
       key_name                   = aws_key_pair.key_pair.key_name
       subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
+      version                    = var.eks_nodegroup_version
+      release_version            = data.aws_ssm_parameter.eks_ami.value
       desired_size               = var.ng_1_size
       min_size                   = var.ng_1_size
       max_size                   = var.ng_1_size

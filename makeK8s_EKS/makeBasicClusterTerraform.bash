@@ -12,6 +12,8 @@ if [[ $1 == "-l" ]]; then
     shift;
 fi
 
+verb=${1:-"apply -auto-approve"}
+
 #instance="${instance0:-m5a.2xlarge}" # "i3en.2xlarge"
 mountPath=${1:-${mountPath}}
 
@@ -23,9 +25,11 @@ if [[ $delete == 1 ]]; then
 else
 
     if [[ ${listout} == 1 ]]; then 
-    terraform output | sed -e's/ = /=/' -e's/\[/(/' -e's/\]/)/' -e's/,$//' 
+    terraform ${verb} | sed -e's/ = /=/' -e's/\[/(/' -e's/\]/)/' -e's/,$//' 
     else
-    terraform apply -auto-approve \
+    terraform ${verb} \
+        -var="eks_cluster_version=${k8sVersion}" \
+        -var="eks_nodegroup_version=${ngVersion}" \
         -var="capacity_type=${capacityType}" \
         -var=ng_0_size=${nodeGroup0size} \
         -var=ng_1_size=${nodeGroup1size} \
@@ -38,7 +42,7 @@ else
     fi
     region=$(terraform output -raw region)
     clusterName=$(terraform output -raw eks_cluster_name)
-    printf "Making the kubeconfig for the new cluser\n"
+    printf "Making the kubeconfig for the new cluster\n"
     aws --region ${region} eks update-kubeconfig --name ${clusterName}
     printf "Making gp2 the default storage class\n"
     kubectl patch storageclass gp2 -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
