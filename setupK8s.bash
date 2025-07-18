@@ -20,11 +20,11 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
     kubectl delete ns cert-manager
     kubectl delete ns scylla-monitoring
     kubectl delete ns scylla-operator
-    kubectl delete $( kubectl get pvc -o name --all-namespaces | egrep "scylla" ) 
     kubectl delete $( kubectl get crds -o name | grep scylla ) 
   fi
 else
 
+printf "Using context: ${context}\n"
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Import/Update Helm Repos\n"
 if [[ ${operatorTag} == "latest" ]]; then

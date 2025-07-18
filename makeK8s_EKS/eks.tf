@@ -182,6 +182,7 @@ module "eks" {
       launch_template_id         = aws_launch_template.group_lt_0.id
       launch_template_version    = "$Latest"
       labels                     = {"scylla.scylladb.com/node-type"="scylla"}
+      taints                     = [{ key = "scylla-operator.scylladb.com/dedicated", value  = "scyllaclusters", effect = "NO_SCHEDULE" }] # Taint to dedicate nodes for ScyllaDB
       # deprecated: bootstrap_extra_args = "--kubelet-extra-args '--cpu-manager-policy=static'"
       # iam_role_attach_cni_policy = true
       iam_role_additional_policies = {

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
-#source init.conf
+[[ -e init.conf ]] && source init.conf
 
 verb=create
 [[ $1 == "-d" ]] && verb=delete; shift
 
-export clusterName="${1:-tjl-basic}"
+export clusterName="${1:-tjl-scylla}"
+export PROJECT_ID="cx-sa-lab"
+export region="${gcpRegion:-us-west1}"
+export zone="${region}-a"
 
 # the actual names for clusters and zones are set in init.conf
 domain="${clusterDomain:-sdb.com}"
@@ -15,10 +18,6 @@ machineType='n2-standard-8' #"e2-standard-8"
 imageType='UBUNTU_CONTAINERD' # 'COS_CONTAINERD'
 rootDiskSize=20 # 100 GB
 #expire="2025-12-31"
-
-export PROJECT_ID="cx-sa-lab"
-export region="us-west1"
-export zone="us-west1-a"
 
 # e2-standard-2 2 core x  8 GB
 # e2-standard-4 4 core x 16 GB

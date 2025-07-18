@@ -1,11 +1,14 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-source init.conf
+[[ -e init.conf ]] && source init.conf
 
 verb=create
 [[ $1 == "-d" ]] && verb=delete; shift
 
 export clusterName="${1:-tjl-scylla}"
+export PROJECT_ID="cx-sa-lab"
+export region="${gcpRegion:-us-west1}"
+export zone="${region}-a"
 
 # the actual names for clusters and zones are set in init.conf
 # domain="${clusterDomain:-sdb.com}"
@@ -18,10 +21,6 @@ machineType1="e2-standard-4" # general operator and other services
 # e2-standard-8 8 core x 32 GB
 imageType='UBUNTU_CONTAINERD' # 'COS_CONTAINERD'
 rootDiskSize=20 # 100 GB
-
-export PROJECT_ID="cx-sa-lab"
-export region="us-west1"
-export zone="us-west1-a"
 
 # Note: the next variable is set with variable names to be used with !name
 gkeLocation="zone" # or "region"
@@ -52,10 +51,10 @@ gcloud container node-pools create "dedicated-pool" \
   --local-nvme-ssd-block count=1 \
   --system-config-from-file=systemconfig.yaml \
   --node-labels="scylla.scylladb.com/node-type=${nodeSelector0}" \
+  --node-taints='scylla-operator.scylladb.com/dedicated=scyllaclusters:NoSchedule' \
   --no-enable-autoupgrade \
   --no-enable-autorepair
 set +x
-#  --node-taints='scylla-operator.scylladb.com/dedicated=scyllaclusters:NoSchedule' \
 
 #    --cluster-dns="clouddns" \
 #    --cluster-dns-scope="vpc" \
@@ -80,6 +79,8 @@ fi
 
 else
 
+# verb=delete
+gcloud container node-pools delete  "dedicated-pool" --cluster ${clusterName} --${gkeLocation}="${!gkeLocation}" --quiet
 gcloud container clusters ${verb} ${clusterName} --${gkeLocation}="${!gkeLocation}" --quiet
 
 fi

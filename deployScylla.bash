@@ -4,21 +4,24 @@ date
 [[ -e init.conf ]] && source init.conf
 
 [[ ${1} == '-c' ]] && clusterOnly=true
-if [[ ${1} == '-d' ]]; then
+if [[ ${1} == '-d' || ${1} == '-x' ]]; then
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 if [[ ${helmEnabled} == true ]]; then
   helm uninstall scylla          --namespace ${scyllaNamespace}
   helm uninstall scylla-manager  --namespace ${scyllaManagerNamespace}
 else
-  kubectl -n ${scyllaNamespace}        delete -f ${scyllaNamespace}.ScyllaCluster.yaml
+  kubectl -n ${scyllaNamespace} delete scyllaCluster/${clusterName}
+  [[ ${1} == '-x' ]] && kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get pvc -o name )
   kubectl -n ${scyllaManagerNamespace} delete -f ${scyllaNamespace}.ScyllaManager.yaml
+  [[ ${1} == '-x' ]] && kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name )
 fi
 # delete the cluster monitoring resource
 kubectl -n ${scyllaNamespace} delete -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 
 else # deploy 
 
+printf "Using context: ${context}\n"
 kubectl get sc -o name|grep xfs 
 if [[ $? != 0 ]]; then
     printf "\n* * * Error - Mising storage class - run setupK8s.bash\n"
@@ -26,7 +29,7 @@ if [[ $? != 0 ]]; then
 fi
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
-printf "Installing the Scylla Cluster\n"
+printf "Installing the Scylla Cluster using version ${dbVersion}\n"
 
 kubectl create ns ${scyllaNamespace} || true
 # create a secret to define the backup location
