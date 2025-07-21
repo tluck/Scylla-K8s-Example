@@ -12,12 +12,26 @@ if [[ ${helmEnabled} == true ]]; then
   helm uninstall scylla-manager  --namespace ${scyllaManagerNamespace}
 else
   kubectl -n ${scyllaNamespace} delete scyllaCluster/${clusterName}
-  [[ ${1} == '-x' ]] && kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get pvc -o name )
+  if [[ ${1} == '-x' ]]; then
+    kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get pvc -o name| grep ${clusterName} | grep -v scylla-manager |grep -v prometheus )
+    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaNamespace} '.items[] | select(.spec.storageClassName=="scylladb-local-xfs" and .spec.claimRef.namespace == $ns) | .metadata.name')
+    kubectl delete ns ${scyllaNamespace}
+  fi
   kubectl -n ${scyllaManagerNamespace} delete -f ${scyllaNamespace}.ScyllaManager.yaml
-  [[ ${1} == '-x' ]] && kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name )
+  kubectl -n ${scyllaManagerNamespace} delete scyllaCluster/scylla-manager
+  if [[ ${1} == '-x' ]]; then
+    kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name |grep manager)
+    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaManagerNamespace} '.items[] | select(.spec.claimRef.namespace == $ns)  | .metadata.name' )
+    kubectl delete ns ${scyllaManagerNamespace}
+  fi
 fi
 # delete the cluster monitoring resource
 kubectl -n ${scyllaNamespace} delete -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
+if [[ ${1} == '-x' ]]; then 
+  kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get pvc -o name |grep prometheus)
+  kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaNamespace} '.items[] | select(.spec.claimRef.namespace == $ns ) | .metadata.name' )
+fi
+
 
 else # deploy 
 

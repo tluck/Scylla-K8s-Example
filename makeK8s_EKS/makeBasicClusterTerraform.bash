@@ -1,6 +1,7 @@
 #!/usr/bin/env bash 
 
-source init.conf
+kubectl config unset current-context
+[[ -e init.conf ]] && source init.conf
 
 if [[ $1 == "-d" ]]; then
     delete=1
@@ -25,7 +26,7 @@ if [[ $delete == 1 ]]; then
 else
 
     if [[ ${listout} == 1 ]]; then 
-    terraform ${verb} | sed -e's/ = /=/' -e's/\[/(/' -e's/\]/)/' -e's/,$//' 
+    terraform output  | sed -e's/ = /=/' -e's/\[/(/' -e's/\]/)/' -e's/,$//'
     else
     terraform ${verb} \
         -var="eks_cluster_version=${k8sVersion}" \

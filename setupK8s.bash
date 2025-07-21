@@ -8,17 +8,15 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
   kubectl delete $(kubectl get nodeconfig -o name)
   kubectl delete ns local-csi-driver
   kubectl delete ns scylla-operator-node-tuning
-  helm uninstall cert-manager     --namespace cert-manager
   helm uninstall monitoring       --namespace scylla-monitoring
+  helm uninstall cert-manager     --namespace cert-manager
   helm uninstall scylla-operator  --namespace scylla-operator
 
   [[ ${backupEnabled} == true ]] && ./deployMinio.bash ${1}
 
   if [[ ${1} == '-x' ]]; then
-    kubectl delete ns ${scyllaNamespace}
-    kubectl delete ns scylla-manager
-    kubectl delete ns cert-manager
     kubectl delete ns scylla-monitoring
+    kubectl delete ns cert-manager
     kubectl delete ns scylla-operator
     kubectl delete $( kubectl get crds -o name | grep scylla ) 
   fi
@@ -27,13 +25,8 @@ else
 printf "Using context: ${context}\n"
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Import/Update Helm Repos\n"
-if [[ ${operatorTag} == "latest" ]]; then
-  helm repo remove scylla
-  helm repo add scylla           	https://scylla-operator-charts.storage.googleapis.com/latest
-else
-  helm repo remove scylla
-  helm repo add scylla           	https://scylla-operator-charts.storage.googleapis.com/stable
-fi
+# helm repo remove scylla
+helm repo add scylla           	    https://scylla-operator-charts.storage.googleapis.com/stable
 helm repo add jetstack            	https://charts.jetstack.io                                  
 helm repo add prometheus-community	https://prometheus-community.github.io/helm-charts          
 helm repo add minio-operator      	https://operator.min.io    
@@ -42,7 +35,7 @@ helm repo update
 if [[ ${context} == *docker* ]]; then
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Label nodes for Scylla deployment\n"
-# label nodes for Scylla
+# label nodes for Scylla - otherwise labels are set during provisioning
 ./labelNodes.bash
 fi
 
@@ -100,14 +93,15 @@ helm install monitoring prometheus-community/kube-prometheus-stack \
   --set "prometheusOperator.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}"
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
-printf "Installing the scylla-operator via Helm\n"
+printf "Installing the scylla-operator v.${operatorTag} via Helm\n"
 # Install Scylla Operator
 cat templateOperator.yaml | sed \
   -e "s|REPOSITORY|${operatorRepository}|g" \
   -e "s|IMAGETAG|${operatorTag}|g" \
   -e "s|NODESELECTOR|${nodeSelector1}|g" \
   > scylla-operator.yaml
-helm install scylla-operator scylla/scylla-operator --create-namespace --namespace scylla-operator -f scylla-operator.yaml --version ${operatorTag}
+[[ ${operatorTag} == "latest" ]] && repo=scylla-latest || repo=scylla
+helm install scylla-operator ${repo}/scylla-operator --create-namespace --namespace scylla-operator -f scylla-operator.yaml --version ${operatorTag}
 
 # wait
 kubectl -n scylla-operator wait deployment/scylla-operator --for=condition=Available=True --timeout=90s
@@ -115,13 +109,14 @@ kubectl -n scylla-operator wait deployment/webhook-server  --for=condition=Avail
 
 sleep 5
 # update the scylla-operator config
+printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${dbVersion}\n"
 kubectl apply --server-side --force-conflicts -f=- <<EOF # ScyllaOperatorConfig.yaml
 apiVersion: scylla.scylladb.com/v1alpha1
 kind: ScyllaOperatorConfig
 metadata:
   name: cluster
 spec:
-  scyllaUtilsImage: docker.io/scylladb/scylla-enterprise:${dbVersion}
+  scyllaUtilsImage: docker.io/scylladb/scylla:${dbVersion}
 EOF
 
 printf "Using the context ${context}\n"

@@ -35,6 +35,20 @@ spec:
       - name: host-root
         hostPath:
           path: /
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: scylla.scylladb.com/node-type
+                    operator: In
+                    values:
+                      - scylla
+      tolerations:
+        - effect: NoSchedule
+          key: scylla-operator.scylladb.com/dedicated
+          operator: Equal
+          value: scyllaclusters
 EOF
 
 # Wait for all pods to be Running or Succeeded
@@ -50,4 +64,4 @@ while true; do
   fi
 done
 
-kubectl -n kube-system delete daemonset ubuntu-xfs-installer
+#kubectl -n kube-system delete daemonset ubuntu-xfs-installer

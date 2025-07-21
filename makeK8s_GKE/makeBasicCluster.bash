@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+kubectl config unset current-context
 [[ -e init.conf ]] && source init.conf
 
 verb=create
@@ -73,9 +74,7 @@ if [[ ${imageType} == 'UBUNTU_CONTAINERD' ]]; then
   # and remove the ubuntu-xfs-installer DaemonSet
   #kubectl apply -f ubuntu-xfs-installer.yaml
   ./ubuntu-fix.bash
-  ./ubuntu-fix.bash
 fi
-
 
 else
 

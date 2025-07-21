@@ -4,7 +4,7 @@ metadata:
   name: CLUSTERNAME
 spec:
   agentVersion: AGENTVERSION # 3.4.2
-  repository: docker.io/scylladb/scylla-enterprise
+  repository: docker.io/scylladb/scylla
   version: DBVERSION # 2024.2.7
   developerMode: DEVMODE
   scyllaArgs: "--smp=CPULIMIT" # "--poll-mode"

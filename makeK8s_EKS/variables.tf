@@ -19,7 +19,7 @@ variable "vpc_id" {
 
 variable "ssh_public_key_file" {
   description = "the existing sshkey to use - assuming the private key is known"
-  default     = "~/.ssh/aws-us-west-2.pub"
+  default     = "~/.ssh/aws.pub"
 }
 
 variable "region" {

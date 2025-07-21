@@ -2,4 +2,8 @@
 
 [[ -e init.conf ]] && source init.conf
 
-kubectl -n ${scyllaNamespace}  exec -it service/scylla-client -c scylla -- cqlsh -u cassandra -p cassandra --connect-timeout=30 --request-timeout=30
+if [[ ${1} == '-r' ]]; then
+  kubectl -n ${scyllaNamespace}  exec -it service/scylla-client -c scylla -- cqlsh -u cassandra -p cassandra --connect-timeout=30 --request-timeout=30
+else
+  cqlsh -u cassandra -p cassandra --connect-timeout=30 --request-timeout=30
+fi
