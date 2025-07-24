@@ -2,30 +2,31 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-#      version = ">= 5.47.0, < 6.0.0"  # Adjust based on compatible versions
+      version = "6.5.0" # Adjust based on compatible versions
     }
 
     random = {
-      source  = "hashicorp/random"
-#      version = ">= 3.6.1"
+      source = "hashicorp/random"
+      #      version = ">= 3.6.1"
     }
 
     tls = {
-      source  = "hashicorp/tls"
-#      version = ">= 4.0.5"
+      source = "hashicorp/tls"
+      #      version = ">= 4.0.5"
     }
 
     cloudinit = {
-      source  = "hashicorp/cloudinit"
-#      version = ">= 2.3.4"
+      source = "hashicorp/cloudinit"
+      #      version = ">= 2.3.4"
     }
   }
 
-#  required_version = "~> 1.3"
+  #  required_version = "~> 1.3"
 }
 
 provider "aws" {
-  region = var.region
+  region  = var.region
+  profile = "cx-sa-lab"
 }
 
 data "aws_vpc" "existing_vpc" {
@@ -35,7 +36,7 @@ data "aws_vpc" "existing_vpc" {
 # Fetch subnets in the default VPC
 data "aws_subnets" "existing_subnets" {
   filter {
-    name   = "vpc-id"
+    name = "vpc-id"
     # values = [aws_vpc.existing.id]
     values = [data.aws_vpc.existing_vpc.id]
   }
@@ -50,7 +51,7 @@ data "aws_ssm_parameter" "eks_ami" {
 locals {
   #eks_security_group_id = module.eks.vpc_config[0].cluster_security_group_id
   eks_cluster_security_group_id = module.eks.cluster_security_group_id
-  eks_node_security_group_id = module.eks.node_security_group_id
+  eks_node_security_group_id    = module.eks.node_security_group_id
 }
 
 # # # Generate a random suffix for resource naming
@@ -74,22 +75,22 @@ resource "aws_vpc" "existing_vpc" {
 # EKS Module using the default VPC and its subnets
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  # version = "20.8.5"
+  version = "21.0.1"
 
-  cluster_name                       = local.cluster_name
-  cluster_version                    = var.eks_cluster_version
-  cluster_endpoint_public_access     = true
+  name                                     = local.cluster_name
+  kubernetes_version                       = var.eks_cluster_version
+  endpoint_public_access                   = true
   enable_cluster_creator_admin_permissions = true
-  create_kms_key                     = false  # Prevents automatic KMS key creation
-  cluster_encryption_config          = {}  # Remove encryption configuration
-  create_cloudwatch_log_group        = false  # Lets EKS manage log groups
-  cluster_enabled_log_types          = []  # Optional: Disables all log types
-  enable_irsa                        = true  # set false to disable OIDC provider creation
-  vpc_id                             = data.aws_vpc.existing_vpc.id
-  subnet_ids                         = data.aws_subnets.existing_subnets.ids
-  bootstrap_self_managed_addons      = true
+  # create_kms_key                           = false # Prevents automatic KMS key creation
+  # encryption_config                        = []   # Remove encryption configuration
+  create_cloudwatch_log_group = false # Lets EKS manage log groups
+  enabled_log_types           = []    # Optional: Disables all log types
+  enable_irsa                 = true  # set false to disable OIDC provider creation
+  vpc_id                      = data.aws_vpc.existing_vpc.id
+  subnet_ids                  = data.aws_subnets.existing_subnets.ids
+  # bootstrap_self_managed_addons      = true
 
-  cluster_addons = {
+  addons = {
     aws-ebs-csi-driver = {
       service_account_role_arn = module.irsa-ebs-csi.iam_role_arn
       # gp2 is the current standard - but is not the default
@@ -98,11 +99,11 @@ module "eks" {
     },
     kube-proxy = {
       service_account_role_arn = module.irsa-kube-proxy.iam_role_arn
-      most_recent_version = true
+      most_recent_version      = true
     },
     coredns = {
       service_account_role_arn = module.irsa-coredns.iam_role_arn
-      most_recent_version = true
+      most_recent_version      = true
     },
     # prometheus-node-exporter = {
     #   # service_account_role_arn = module.irsa-node-exporter.iam_role_arn
@@ -162,6 +163,43 @@ module "eks" {
       protocol    = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }
+
+    ingress_allow_sparkmaster = {
+      type        = "ingress"
+      description = "SparkMaster"
+      from_port   = 7077
+      to_port     = 7077
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    ingress_allow_sparkuidriver = {
+      type        = "ingress"
+      description = "SparkUIDriver"
+      from_port   = 4040
+      to_port     = 4040
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    ingress_allow_sparkuiexecutor = {
+      type        = "ingress"
+      description = "SparkUIExecutor"
+      from_port   = 4041
+      to_port     = 4049
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    ingress_allow_sparkhistory = {
+      type        = "ingress"
+      description = "SparkHistory"
+      from_port   = 18080
+      to_port     = 18080
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+
   }
   # create group 0 nodes dedicated for scyllaDB
   eks_managed_node_groups = {
@@ -181,8 +219,14 @@ module "eks" {
       use_custom_launch_template = true
       launch_template_id         = aws_launch_template.group_lt_0.id
       launch_template_version    = "$Latest"
-      labels                     = {"scylla.scylladb.com/node-type"="scylla"}
-      taints                     = [{ key = "scylla-operator.scylladb.com/dedicated", value  = "scyllaclusters", effect = "NO_SCHEDULE" }] # Taint to dedicate nodes for ScyllaDB
+      labels                     = { "scylla.scylladb.com/node-type" = "scylla" }
+      taints = {
+        dedicated = {
+          key    = "scylla-operator.scylladb.com/dedicated"
+          value  = "scyllaclusters"
+          effect = "NO_SCHEDULE"
+        }
+      }
       # deprecated: bootstrap_extra_args = "--kubelet-extra-args '--cpu-manager-policy=static'"
       # iam_role_attach_cni_policy = true
       iam_role_additional_policies = {
@@ -194,8 +238,8 @@ module "eks" {
         EKSListDescribeAccess = jsonencode({
           Version = "2012-10-17"
           Statement = [{
-            Effect   = "Allow"
-            Action   = [
+            Effect = "Allow"
+            Action = [
               "eks:ListClusters",
               "eks:DescribeCluster"
             ]
@@ -204,8 +248,8 @@ module "eks" {
         })
       }
     },
-  # create group 1 nodes for scylla operator and other services
-  eks_node_group_1 = {
+    # create group 1 nodes for scylla operator and other services
+    eks_node_group_1 = {
       name                       = "${module.eks.cluster_name}-1"
       ami_type                   = "AL2023_x86_64_STANDARD"
       instance_types             = [local.instance_type1]
@@ -221,7 +265,7 @@ module "eks" {
       use_custom_launch_template = true
       launch_template_id         = aws_launch_template.group_lt_1.id
       launch_template_version    = "$Latest"
-      labels                     = {"scylla.scylladb.com/node-type"="scylla-operator"}
+      labels                     = { "scylla.scylladb.com/node-type" = "scylla-operator" }
       # iam_role_attach_cni_policy = true
       iam_role_additional_policies = {
         AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
@@ -232,8 +276,42 @@ module "eks" {
         EKSListDescribeAccess = jsonencode({
           Version = "2012-10-17"
           Statement = [{
-            Effect   = "Allow"
-            Action   = [
+            Effect = "Allow"
+            Action = [
+              "eks:ListClusters",
+              "eks:DescribeCluster"
+            ]
+            Resource = "*"
+          }]
+        })
+      }
+    },
+    eks_node_group_2 = {
+      name            = "${module.eks.cluster_name}-2"
+      ami_type        = "AL2023_x86_64_STANDARD"
+      instance_types  = [local.instance_type2] # You'd need to define this  
+      capacity_type   = var.capacity_type
+      key_name        = aws_key_pair.key_pair.key_name
+      subnet_ids      = [data.aws_subnets.existing_subnets.ids[0]]
+      version         = var.eks_nodegroup_version
+      release_version = data.aws_ssm_parameter.eks_ami.value
+      desired_size    = 3 # Your 3 Spark nodes  
+      min_size        = 3
+      max_size        = 3
+      labels          = { "scylla.scylladb.com/node-type" = "spark" }
+      #taints = []
+      iam_role_additional_policies = {
+        AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+        AmazonEC2FullAccess      = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+        AmazonS3FullAccess       = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+      }
+      # Add this to run aws cli commands in the node group
+      iam_role_inline_policies = {
+        EKSListDescribeAccess = jsonencode({
+          Version = "2012-10-17"
+          Statement = [{
+            Effect = "Allow"
+            Action = [
               "eks:ListClusters",
               "eks:DescribeCluster"
             ]
@@ -247,7 +325,7 @@ module "eks" {
 }
 
 resource "aws_launch_template" "group_lt_0" {
-  name          = "${var.prefix}group-eks-launch-template-0"
+  name = "${var.prefix}group-eks-launch-template-0"
   # image_id      = data.aws_ssm_parameter.eks_ami.value
   # instance_type = local.instance_type0 # i4i.2xlarge"
   key_name = aws_key_pair.key_pair.key_name # Replace with your SSH key pair name
@@ -259,7 +337,7 @@ resource "aws_launch_template" "group_lt_0" {
     }
   }
   # this will be used to set the CPU manager policy
-  user_data     = base64encode(<<-EOT
+  user_data = base64encode(<<-EOT
     MIME-Version: 1.0
     Content-Type: multipart/mixed; boundary="BOUNDARY"
 
@@ -292,13 +370,13 @@ resource "aws_launch_template" "group_lt_0" {
   EOT
   )
   metadata_options {
-    http_tokens = "required"
+    http_tokens                 = "required"
     http_put_response_hop_limit = 2
-    http_endpoint = "enabled"
+    http_endpoint               = "enabled"
   }
   # Attach EKS security group
   network_interfaces {
-    security_groups = [local.eks_node_security_group_id ]
+    security_groups       = [local.eks_node_security_group_id]
     delete_on_termination = true
   }
   # Add tags to propagate to instances and volumes
@@ -317,7 +395,7 @@ resource "aws_launch_template" "group_lt_0" {
 }
 
 resource "aws_launch_template" "group_lt_1" {
-  name          = "${var.prefix}group-eks-launch-template-1"
+  name = "${var.prefix}group-eks-launch-template-1"
   # image_id      = data.aws_ssm_parameter.eks_ami.value
   key_name = aws_key_pair.key_pair.key_name # Replace with your SSH key pair name
   block_device_mappings {
@@ -328,13 +406,13 @@ resource "aws_launch_template" "group_lt_1" {
     }
   }
   metadata_options {
-    http_tokens = "required"
+    http_tokens                 = "required"
     http_put_response_hop_limit = 2
-    http_endpoint = "enabled"
+    http_endpoint               = "enabled"
   }
   # Attach EKS security group
   network_interfaces {
-    security_groups = [ local.eks_node_security_group_id ]
+    security_groups       = [local.eks_node_security_group_id]
     delete_on_termination = true
   }
   # Add tags to propagate to instances and volumes
@@ -359,7 +437,7 @@ resource "aws_launch_template" "group_lt_1" {
 
 # IAM role for EBS CSI driver
 module "irsa-ebs-csi" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  source = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   #version = "5.39.0"
 
   create_role                   = true
@@ -371,7 +449,7 @@ module "irsa-ebs-csi" {
 
 # IAM role for Kube Proxy
 module "irsa-kube-proxy" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  source = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   #version = "5.39.0"
 
   create_role                   = true
@@ -383,7 +461,7 @@ module "irsa-kube-proxy" {
 
 # IAM role for CoreDNS
 module "irsa-coredns" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
+  source = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   #version = "5.39.0"
 
   create_role                   = true
@@ -412,6 +490,6 @@ resource "aws_security_group_rule" "metadata_access" {
   from_port         = 80
   to_port           = 80
   protocol          = "tcp"
-  cidr_blocks       = ["169.254.169.254/32"]  # EC2 metadata endpoint
+  cidr_blocks       = ["169.254.169.254/32"] # EC2 metadata endpoint
   security_group_id = local.eks_node_security_group_id
 }
