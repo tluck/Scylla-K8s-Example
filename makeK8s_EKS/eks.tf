@@ -164,41 +164,42 @@ module "eks" {
       cidr_blocks = ["0.0.0.0/0"]
     }
 
-    ingress_allow_sparkmaster = {
-      type        = "ingress"
-      description = "SparkMaster"
-      from_port   = 7077
-      to_port     = 7077
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
+    # For spark Not required. 
+    # ingress_allow_sparkmaster = {
+    #   type        = "ingress"
+    #   description = "SparkMaster"
+    #   from_port   = 7077
+    #   to_port     = 7077
+    #   protocol    = "tcp"
+    #   cidr_blocks = ["0.0.0.0/0"]
+    # }
 
-    ingress_allow_sparkuidriver = {
-      type        = "ingress"
-      description = "SparkUIDriver"
-      from_port   = 4040
-      to_port     = 4040
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
+    # ingress_allow_sparkuidriver = {
+    #   type        = "ingress"
+    #   description = "SparkUIDriver"
+    #   from_port   = 4040
+    #   to_port     = 4040
+    #   protocol    = "tcp"
+    #   cidr_blocks = ["0.0.0.0/0"]
+    # }
 
-    ingress_allow_sparkuiexecutor = {
-      type        = "ingress"
-      description = "SparkUIExecutor"
-      from_port   = 4041
-      to_port     = 4049
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
+    # ingress_allow_sparkuiexecutor = {
+    #   type        = "ingress"
+    #   description = "SparkUIExecutor"
+    #   from_port   = 4041
+    #   to_port     = 4049
+    #   protocol    = "tcp"
+    #   cidr_blocks = ["0.0.0.0/0"]
+    # }
 
-    ingress_allow_sparkhistory = {
-      type        = "ingress"
-      description = "SparkHistory"
-      from_port   = 18080
-      to_port     = 18080
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
+    # ingress_allow_sparkhistory = {
+    #   type        = "ingress"
+    #   description = "SparkHistory"
+    #   from_port   = 18080
+    #   to_port     = 18080
+    #   protocol    = "tcp"
+    #   cidr_blocks = ["0.0.0.0/0"]
+    # }
 
   }
   # create group 0 nodes dedicated for scyllaDB
@@ -286,40 +287,41 @@ module "eks" {
         })
       }
     },
-    eks_node_group_2 = {
-      name            = "${module.eks.cluster_name}-2"
-      ami_type        = "AL2023_x86_64_STANDARD"
-      instance_types  = [local.instance_type2] # You'd need to define this  
-      capacity_type   = var.capacity_type
-      key_name        = aws_key_pair.key_pair.key_name
-      subnet_ids      = [data.aws_subnets.existing_subnets.ids[0]]
-      version         = var.eks_nodegroup_version
-      release_version = data.aws_ssm_parameter.eks_ami.value
-      desired_size    = 3 # Your 3 Spark nodes  
-      min_size        = 3
-      max_size        = 3
-      labels          = { "scylla.scylladb.com/node-type" = "spark" }
-      #taints = []
-      iam_role_additional_policies = {
-        AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-        AmazonEC2FullAccess      = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
-        AmazonS3FullAccess       = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-      }
-      # Add this to run aws cli commands in the node group
-      iam_role_inline_policies = {
-        EKSListDescribeAccess = jsonencode({
-          Version = "2012-10-17"
-          Statement = [{
-            Effect = "Allow"
-            Action = [
-              "eks:ListClusters",
-              "eks:DescribeCluster"
-            ]
-            Resource = "*"
-          }]
-        })
-      }
-    }
+    # For Spark Not required currently
+    # eks_node_group_2 = {
+    #   name            = "${module.eks.cluster_name}-2"
+    #   ami_type        = "AL2023_x86_64_STANDARD"
+    #   instance_types  = [local.instance_type2] # You'd need to define this  
+    #   capacity_type   = var.capacity_type
+    #   key_name        = aws_key_pair.key_pair.key_name
+    #   subnet_ids      = [data.aws_subnets.existing_subnets.ids[0]]
+    #   version         = var.eks_nodegroup_version
+    #   release_version = data.aws_ssm_parameter.eks_ami.value
+    #   desired_size    = 3 # Your 3 Spark nodes  
+    #   min_size        = 3
+    #   max_size        = 3
+    #   labels          = { "scylla.scylladb.com/node-type" = "spark" }
+    #   #taints = []
+    #   iam_role_additional_policies = {
+    #     AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+    #     AmazonEC2FullAccess      = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+    #     AmazonS3FullAccess       = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+    #   }
+    #   # Add this to run aws cli commands in the node group
+    #   iam_role_inline_policies = {
+    #     EKSListDescribeAccess = jsonencode({
+    #       Version = "2012-10-17"
+    #       Statement = [{
+    #         Effect = "Allow"
+    #         Action = [
+    #           "eks:ListClusters",
+    #           "eks:DescribeCluster"
+    #         ]
+    #         Resource = "*"
+    #       }]
+    #     })
+    #   }
+    # }
 
   }
 }
