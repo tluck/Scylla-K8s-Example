@@ -32,7 +32,7 @@ variable "region" {
 variable "eks_cluster_version" {
   description = "AWS eks cluster version"
   type        = string
-  default     = "1.32"
+  default     = "1.33"
 }
 
 variable "eks_nodegroup_version" {
@@ -78,4 +78,10 @@ variable "capacity_type" {
   description = "capacity type for the node group"
   type        = string
   default     = "ON_DEMAND" # or SPOT
+}
+
+variable "enable_spark" {
+  description = "Whether to enable the Spark node group"
+  type        = bool
+  default     = false
 }

@@ -52,6 +52,77 @@ locals {
   #eks_security_group_id = module.eks.vpc_config[0].cluster_security_group_id
   eks_cluster_security_group_id = module.eks.cluster_security_group_id
   eks_node_security_group_id    = module.eks.node_security_group_id
+  spark_node_group = var.enable_spark ? {
+    eks_node_group_2 = {
+      name            = "${module.eks.cluster_name}-2"
+      ami_type        = "AL2023_x86_64_STANDARD"
+      instance_types  = [local.instance_type2]
+      capacity_type   = var.capacity_type
+      key_name        = aws_key_pair.key_pair.key_name
+      subnet_ids      = [data.aws_subnets.existing_subnets.ids[0]]
+      version         = var.eks_nodegroup_version
+      release_version = data.aws_ssm_parameter.eks_ami.value
+      desired_size    = 3
+      min_size        = 3
+      max_size        = 3
+      labels          = { "scylla.scylladb.com/node-type" = "spark" }
+      iam_role_additional_policies = {
+        AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+        AmazonEC2FullAccess      = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+        AmazonS3FullAccess       = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+      }
+      iam_role_inline_policies = {
+        EKSListDescribeAccess = jsonencode({
+          Version = "2012-10-17"
+          Statement = [{
+            Effect = "Allow"
+            Action = [
+              "eks:ListClusters",
+              "eks:DescribeCluster"
+            ]
+            Resource = "*"
+          }]
+        })
+      }
+    }
+  } : {}
+  spark_sg_rules = var.enable_spark ? {
+    ingress_allow_sparkmaster = {
+      type        = "ingress"
+      description = "SparkMaster"
+      from_port   = 7077
+      to_port     = 7077
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    ingress_allow_sparkuidriver = {
+      type        = "ingress"
+      description = "SparkUIDriver"
+      from_port   = 4040
+      to_port     = 4040
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    ingress_allow_sparkuiexecutor = {
+      type        = "ingress"
+      description = "SparkUIExecutor"
+      from_port   = 4041
+      to_port     = 4049
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    ingress_allow_sparkhistory = {
+      type        = "ingress"
+      description = "SparkHistory"
+      from_port   = 18080
+      to_port     = 18080
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  } : {}
 }
 
 # # # Generate a random suffix for resource naming
@@ -118,212 +189,142 @@ module "eks" {
     # }
   }
 
-  node_security_group_additional_rules = {
-    ingress_allow_ssh = {
-      type        = "ingress"
-      description = "SSH"
-      from_port   = 22
-      to_port     = 22
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
+  node_security_group_additional_rules = merge(
+    {
+      ingress_allow_ssh = {
+        type        = "ingress"
+        description = "SSH"
+        from_port   = 22
+        to_port     = 22
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
 
-    ingress_allow_https = {
-      type        = "ingress"
-      description = "HTTPS"
-      from_port   = 443
-      to_port     = 443
-      protocol    = "tcp"
-      cidr_blocks = ["172.31.0.0/16"]
-    }
+      ingress_allow_https = {
+        type        = "ingress"
+        description = "HTTPS"
+        from_port   = 443
+        to_port     = 443
+        protocol    = "tcp"
+        cidr_blocks = ["172.31.0.0/16"]
+      }
 
-    ingress_allow_webhook = {
-      type        = "ingress"
-      description = "Webhook"
-      from_port   = 5000
-      to_port     = 5000
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
+      ingress_allow_webhook = {
+        type        = "ingress"
+        description = "Webhook"
+        from_port   = 5000
+        to_port     = 5000
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
 
-    ingress_allow_prometheus = {
-      type        = "ingress"
-      description = "Prometheus"
-      from_port   = 9090
-      to_port     = 9090
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
+      ingress_allow_prometheus = {
+        type        = "ingress"
+        description = "Prometheus"
+        from_port   = 9090
+        to_port     = 9090
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
 
-    ingress_allow_grafana = {
-      type        = "ingress"
-      description = "Grafana"
-      from_port   = 3000
-      to_port     = 3000
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
+      ingress_allow_grafana = {
+        type        = "ingress"
+        description = "Grafana"
+        from_port   = 3000
+        to_port     = 3000
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    } },
+  local.spark_sg_rules)
 
-    # For spark Not required. 
-    # ingress_allow_sparkmaster = {
-    #   type        = "ingress"
-    #   description = "SparkMaster"
-    #   from_port   = 7077
-    #   to_port     = 7077
-    #   protocol    = "tcp"
-    #   cidr_blocks = ["0.0.0.0/0"]
-    # }
-
-    # ingress_allow_sparkuidriver = {
-    #   type        = "ingress"
-    #   description = "SparkUIDriver"
-    #   from_port   = 4040
-    #   to_port     = 4040
-    #   protocol    = "tcp"
-    #   cidr_blocks = ["0.0.0.0/0"]
-    # }
-
-    # ingress_allow_sparkuiexecutor = {
-    #   type        = "ingress"
-    #   description = "SparkUIExecutor"
-    #   from_port   = 4041
-    #   to_port     = 4049
-    #   protocol    = "tcp"
-    #   cidr_blocks = ["0.0.0.0/0"]
-    # }
-
-    # ingress_allow_sparkhistory = {
-    #   type        = "ingress"
-    #   description = "SparkHistory"
-    #   from_port   = 18080
-    #   to_port     = 18080
-    #   protocol    = "tcp"
-    #   cidr_blocks = ["0.0.0.0/0"]
-    # }
-
-  }
   # create group 0 nodes dedicated for scyllaDB
-  eks_managed_node_groups = {
-    eks_node_group_0 = {
-      name                       = "${module.eks.cluster_name}-0"
-      ami_type                   = "AL2023_x86_64_STANDARD"
-      instance_types             = [local.instance_type0]
-      capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT"
-      key_name                   = aws_key_pair.key_pair.key_name
-      subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
-      version                    = var.eks_nodegroup_version
-      release_version            = data.aws_ssm_parameter.eks_ami.value
-      desired_size               = var.ng_0_size
-      min_size                   = var.ng_0_size
-      max_size                   = var.ng_0_size
-      create_launch_template     = false
-      use_custom_launch_template = true
-      launch_template_id         = aws_launch_template.group_lt_0.id
-      launch_template_version    = "$Latest"
-      labels                     = { "scylla.scylladb.com/node-type" = "scylla" }
-      taints = {
-        dedicated = {
-          key    = "scylla-operator.scylladb.com/dedicated"
-          value  = "scyllaclusters"
-          effect = "NO_SCHEDULE"
+  eks_managed_node_groups = merge(
+    {
+      eks_node_group_0 = {
+        name                       = "${module.eks.cluster_name}-0"
+        ami_type                   = "AL2023_x86_64_STANDARD"
+        instance_types             = [local.instance_type0]
+        capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT"
+        key_name                   = aws_key_pair.key_pair.key_name
+        subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
+        version                    = var.eks_nodegroup_version
+        release_version            = data.aws_ssm_parameter.eks_ami.value
+        desired_size               = var.ng_0_size
+        min_size                   = var.ng_0_size
+        max_size                   = var.ng_0_size
+        create_launch_template     = false
+        use_custom_launch_template = true
+        launch_template_id         = aws_launch_template.group_lt_0.id
+        launch_template_version    = "$Latest"
+        labels                     = { "scylla.scylladb.com/node-type" = "scylla" }
+        taints = {
+          dedicated = {
+            key    = "scylla-operator.scylladb.com/dedicated"
+            value  = "scyllaclusters"
+            effect = "NO_SCHEDULE"
+          }
+        }
+        # deprecated: bootstrap_extra_args = "--kubelet-extra-args '--cpu-manager-policy=static'"
+        # iam_role_attach_cni_policy = true
+        iam_role_additional_policies = {
+          AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+          AmazonEC2FullAccess      = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+        }
+        # Add this to run aws cli commands in the node group
+        iam_role_inline_policies = {
+          EKSListDescribeAccess = jsonencode({
+            Version = "2012-10-17"
+            Statement = [{
+              Effect = "Allow"
+              Action = [
+                "eks:ListClusters",
+                "eks:DescribeCluster"
+              ]
+              Resource = "*"
+            }]
+          })
+        }
+      },
+      # create group 1 nodes for scylla operator and other services
+      eks_node_group_1 = {
+        name                       = "${module.eks.cluster_name}-1"
+        ami_type                   = "AL2023_x86_64_STANDARD"
+        instance_types             = [local.instance_type1]
+        capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT"
+        key_name                   = aws_key_pair.key_pair.key_name
+        subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
+        version                    = var.eks_nodegroup_version
+        release_version            = data.aws_ssm_parameter.eks_ami.value
+        desired_size               = var.ng_1_size
+        min_size                   = var.ng_1_size
+        max_size                   = var.ng_1_size
+        create_launch_template     = false
+        use_custom_launch_template = true
+        launch_template_id         = aws_launch_template.group_lt_1.id
+        launch_template_version    = "$Latest"
+        labels                     = { "scylla.scylladb.com/node-type" = "scylla-operator" }
+        # iam_role_attach_cni_policy = true
+        iam_role_additional_policies = {
+          AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+          AmazonEC2FullAccess      = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+        }
+        # Add this to run aws cli commands in the node group
+        iam_role_inline_policies = {
+          EKSListDescribeAccess = jsonencode({
+            Version = "2012-10-17"
+            Statement = [{
+              Effect = "Allow"
+              Action = [
+                "eks:ListClusters",
+                "eks:DescribeCluster"
+              ]
+              Resource = "*"
+            }]
+          })
         }
       }
-      # deprecated: bootstrap_extra_args = "--kubelet-extra-args '--cpu-manager-policy=static'"
-      # iam_role_attach_cni_policy = true
-      iam_role_additional_policies = {
-        AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-        AmazonEC2FullAccess      = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
-      }
-      # Add this to run aws cli commands in the node group
-      iam_role_inline_policies = {
-        EKSListDescribeAccess = jsonencode({
-          Version = "2012-10-17"
-          Statement = [{
-            Effect = "Allow"
-            Action = [
-              "eks:ListClusters",
-              "eks:DescribeCluster"
-            ]
-            Resource = "*"
-          }]
-        })
-      }
     },
-    # create group 1 nodes for scylla operator and other services
-    eks_node_group_1 = {
-      name                       = "${module.eks.cluster_name}-1"
-      ami_type                   = "AL2023_x86_64_STANDARD"
-      instance_types             = [local.instance_type1]
-      capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT"
-      key_name                   = aws_key_pair.key_pair.key_name
-      subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
-      version                    = var.eks_nodegroup_version
-      release_version            = data.aws_ssm_parameter.eks_ami.value
-      desired_size               = var.ng_1_size
-      min_size                   = var.ng_1_size
-      max_size                   = var.ng_1_size
-      create_launch_template     = false
-      use_custom_launch_template = true
-      launch_template_id         = aws_launch_template.group_lt_1.id
-      launch_template_version    = "$Latest"
-      labels                     = { "scylla.scylladb.com/node-type" = "scylla-operator" }
-      # iam_role_attach_cni_policy = true
-      iam_role_additional_policies = {
-        AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-        AmazonEC2FullAccess      = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
-      }
-      # Add this to run aws cli commands in the node group
-      iam_role_inline_policies = {
-        EKSListDescribeAccess = jsonencode({
-          Version = "2012-10-17"
-          Statement = [{
-            Effect = "Allow"
-            Action = [
-              "eks:ListClusters",
-              "eks:DescribeCluster"
-            ]
-            Resource = "*"
-          }]
-        })
-      }
-    },
-    # For Spark Not required currently
-    # eks_node_group_2 = {
-    #   name            = "${module.eks.cluster_name}-2"
-    #   ami_type        = "AL2023_x86_64_STANDARD"
-    #   instance_types  = [local.instance_type2] # You'd need to define this  
-    #   capacity_type   = var.capacity_type
-    #   key_name        = aws_key_pair.key_pair.key_name
-    #   subnet_ids      = [data.aws_subnets.existing_subnets.ids[0]]
-    #   version         = var.eks_nodegroup_version
-    #   release_version = data.aws_ssm_parameter.eks_ami.value
-    #   desired_size    = 3 # Your 3 Spark nodes  
-    #   min_size        = 3
-    #   max_size        = 3
-    #   labels          = { "scylla.scylladb.com/node-type" = "spark" }
-    #   #taints = []
-    #   iam_role_additional_policies = {
-    #     AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-    #     AmazonEC2FullAccess      = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
-    #     AmazonS3FullAccess       = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-    #   }
-    #   # Add this to run aws cli commands in the node group
-    #   iam_role_inline_policies = {
-    #     EKSListDescribeAccess = jsonencode({
-    #       Version = "2012-10-17"
-    #       Statement = [{
-    #         Effect = "Allow"
-    #         Action = [
-    #           "eks:ListClusters",
-    #           "eks:DescribeCluster"
-    #         ]
-    #         Resource = "*"
-    #       }]
-    #     })
-    #   }
-    # }
-
-  }
+  local.spark_node_group)
 }
 
 resource "aws_launch_template" "group_lt_0" {
