@@ -1,6 +1,6 @@
 output "eks_cluster_name" {
   description = "Kubernetes Cluster Name"
-  value = module.eks.cluster_name
+  value       = module.eks.cluster_name
 }
 
 output "eks_node_group_ids" {
@@ -20,7 +20,7 @@ output "cluster_security_group_id" {
 }
 
 output "node_security_group_id" {
-  description = "Security group ids attached to the node group" 
+  description = "Security group ids attached to the node group"
   value       = module.eks.node_security_group_id
 }
 
