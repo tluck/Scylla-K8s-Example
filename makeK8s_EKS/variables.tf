@@ -1,12 +1,12 @@
 variable "prefix" {
   description = "Unique Name"
   type        = string
-  default     = "tdenton-"
+  default     = "test-"
 }
 
 # default and test workspaces:
 locals {
-  cluster_name   = "${var.prefix}scylla"
+  cluster_name = "${var.prefix}scylla"
   instance_type0 = var.instance0
   instance_type1 = var.instance1
   instance_type2 = var.instance2
@@ -14,13 +14,13 @@ locals {
 
 # the default VPC is used vs specifying one
 variable "vpc_id" {
-  type    = string
+  type = string
   default = "vpc-412d8839"
 }
 
 variable "ssh_public_key_file" {
   description = "the existing sshkey to use - assuming the private key is known"
-  default     = "~/.ssh/scylla-password.pub"
+  default     = "~/.ssh/aws.pub"
 }
 
 variable "region" {
@@ -32,7 +32,7 @@ variable "region" {
 variable "eks_cluster_version" {
   description = "AWS eks cluster version"
   type        = string
-  default     = "1.33"
+  default     = "1.32"
 }
 
 variable "eks_nodegroup_version" {
@@ -58,26 +58,32 @@ variable "instance2" {
 
 variable "ng_0_size" {
   description = "number of nodes in node group 0"
-  type        = number
-  default     = 3
+  type    = number
+  default = 3
 }
 
 variable "ng_1_size" {
   description = "number of nodes in node group 1"
-  type        = number
-  default     = 3
+  type    = number
+  default = 3
+}
+
+variable "ng_2_size" {
+  description = "number of nodes in node group 2"
+  type    = number
+  default = 3
 }
 
 variable "ebsSize" {
   description = "EBS Disk size"
-  type        = number
-  default     = 100
+  type    = number
+  default = 100
 }
 
 variable "capacity_type" {
   description = "capacity type for the node group"
-  type        = string
-  default     = "ON_DEMAND" # or SPOT
+  type    = string
+  default = "ON_DEMAND" # or SPOT
 }
 
 variable "enable_spark" {

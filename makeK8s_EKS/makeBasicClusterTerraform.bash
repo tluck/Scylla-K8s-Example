@@ -1,7 +1,9 @@
 #!/usr/bin/env bash 
 
+currentContext=$(kubectl config current-context)
 kubectl config unset current-context
 [[ -e init.conf ]] && source init.conf
+[[ -n ${currentContext} ]] && kubectl config set current-context ${currentContext}
 
 if [[ $1 == "-d" ]]; then
     delete=1
@@ -26,21 +28,33 @@ if [[ $delete == 1 ]]; then
 else
 
     if [[ ${listout} == 1 ]]; then 
-    terraform output  | sed -e's/ = /=/' -e's/\[/(/' -e's/\]/)/' -e's/,$//'
+        terraform output | sed -e's/ = /=/' -e's/\[/(/' -e's/\]/)/' -e's/,$//'
     else
+
+    if [[ ! -e .terraform ]]; then
+        printf "%s\n" "No .terraform directory found, running terraform init"
+        terraform init
+    fi
+    printf "%s\n" "Running terraform ${verb}"
     terraform ${verb} \
         -var="eks_cluster_version=${k8sVersion}" \
         -var="eks_nodegroup_version=${ngVersion}" \
         -var="capacity_type=${capacityType}" \
         -var=ng_0_size=${nodeGroup0size} \
         -var=ng_1_size=${nodeGroup1size} \
+        -var=ng_2_size=${nodeGroup2size} \
         -var="instance0=${instance0}" \
         -var="instance1=${instance1}" \
+        -var="instance2=${instance2}" \
         -var="ebsSize=${ebsSize}" \
         -var="prefix=${prefix}" \
         -var="vpc_id=${vpcId}" \
         -var="ssh_public_key_file=${sshKey}"
+
+    if [[ ${verb} != *"apply"* ]]; then
+        exit 0
     fi
+    fi 
     region=$(terraform output -raw region)
     clusterName=$(terraform output -raw eks_cluster_name)
     printf "Making the kubeconfig for the new cluster\n"
