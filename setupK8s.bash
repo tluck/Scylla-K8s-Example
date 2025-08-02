@@ -93,7 +93,7 @@ helm install monitoring prometheus-community/kube-prometheus-stack \
   --set "prometheusOperator.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}"
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
-printf "Installing the scylla-operator v.${operatorTag} via Helm\n"
+printf "Installing the scylla-operator v${operatorTag} via Helm\n"
 # Install Scylla Operator
 cat templateOperator.yaml | sed \
   -e "s|REPOSITORY|${operatorRepository}|g" \
@@ -116,17 +116,16 @@ kind: ScyllaOperatorConfig
 metadata:
   name: cluster
 spec:
-  scyllaUtilsImage: docker.io/scylladb/scylla:${dbVersion}
+  # the 2025.2.x images have a bug that prevents the scylla-operator from working properly
+  # scyllaUtilsImage: docker.io/scylladb/scylla:${dbVersion}
+  scyllaUtilsImage: docker.io/scylladb/scylla:2025.1.5
 EOF
 
 printf "Using the context ${context}\n"
+# Install the storageclass scylladb-local-xfs
 if [[ ${context} == *docker* ]]; then
-  # Install the storageclass scylladb-local-xfs
-  # kubectl apply -f sc.yaml 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Installing the scylladb-local-xfs storageclass\n"
-# Install the storageclass scylladb-local-xfs
-# kubectl apply -f sc.yaml 
 kubectl apply -f=- <<EOF
 apiVersion: storage.k8s.io/v1
 kind: StorageClass

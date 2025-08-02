@@ -179,16 +179,17 @@ module "eks" {
       most_recent_version = true
       before_compute  = true  # ensures addon is created before nodegroups
     }
-    coredns = {
-      service_account_role_arn = module.irsa-coredns.iam_role_arn
-      most_recent_version = true
-    },
-    aws-ebs-csi-driver = {
-      service_account_role_arn = module.irsa-ebs-csi.iam_role_arn
-      # gp2 is the current standard - but is not the default
-      # configuration_values = jsonencode({ defaultStorageClass = { enabled = true } })
-      most_recent_version = true
-    },
+    # moved to aws_eks_addon resources
+    # coredns = {
+    #   service_account_role_arn = module.irsa-coredns.iam_role_arn
+    #   most_recent_version = true
+    # },
+    # aws-ebs-csi-driver = {
+    #   service_account_role_arn = module.irsa-ebs-csi.iam_role_arn
+    #   # gp2 is the current standard - but is not the default
+    #   # configuration_values = jsonencode({ defaultStorageClass = { enabled = true } })
+    #   most_recent_version = true
+    # },
     # not needed below
     # prometheus-node-exporter = {
     #   # service_account_role_arn = module.irsa-node-exporter.iam_role_arn
@@ -339,6 +340,20 @@ module "eks" {
 
 } # end of module "eks"
 
+resource "aws_eks_addon" "coredns" {
+  depends_on               = [aws_eks_node_group.dedicated, aws_eks_node_group.non-dedicated]
+  cluster_name             = module.eks.cluster_name
+  addon_name               = "coredns"
+  service_account_role_arn = module.irsa-coredns.iam_role_arn
+}
+
+resource "aws_eks_addon" "ebs_csi_driver" {
+  depends_on               = [aws_eks_node_group.dedicated, aws_eks_node_group.non-dedicated]
+  cluster_name             = module.eks.cluster_name
+  addon_name               = "aws-ebs-csi-driver"
+  service_account_role_arn = module.irsa-ebs-csi.iam_role_arn
+}
+
 # Create the launch template for the dedicated node group
 resource "aws_launch_template" "group_lt_0" {
   name = "${var.prefix}group-eks-launch-template-0"
@@ -446,7 +461,6 @@ resource "aws_launch_template" "group_lt_1" {
     }
   }
 }
-
 
 # Create a dedicated node group for ScyllaDB
 resource "aws_eks_node_group" "dedicated" {
@@ -594,7 +608,6 @@ resource "aws_iam_role_policy_attachment" "vpc_cni_policies" {
     "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
     "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
   ])
-
   role       = aws_iam_role.vpc_cni_pod_identity.name
   policy_arn = each.value
 }
