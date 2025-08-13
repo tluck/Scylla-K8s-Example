@@ -4,7 +4,7 @@ This repository holds examples of deploying ScyllaDB with the Kubernetes [Scylla
 
 ## End-to-End Deployment in K8s
 
-This example will deploy a small-scale 3-node cluster in a single "datacenter". Optionally, a second datacenter can be deployed. 
+This example will deploy a small-scale 6-node cluster in a single "datacenter" (cloud region). Two node groups are used - one is dedicated for ScyllaDB and a second node group is deployed for all the supporting resources. Optionally, a second datacenter can be deployed. 
 
 ### Prerequisites
 - A K8s cluster (Kind, EKS, GKS) with admin access
@@ -43,10 +43,13 @@ For a multi-dc cluster, change the init.conf dataCenterName to dc2 and rerun the
 * cqlsh: use the `client.bash` script to connect to the cluster pods.
 * sctool: use the `manager.bash` script to connect to the manager pods.
 
-On the manager, to run a backup:
+To create a backup, run `create_backup.bash`, or on the mananger pod run for cloud object storege backups:
 
+	# update for authention:
 	sctool cluster update --username cassandra --password cassandra -c scylla-dc1/scylla
+	# AWS object storage (s3):
 	sctool backup -c scylla-dc1/scylla -L s3:scylla-backups
+	# GCP object storage:
 	sctool backup -c scylla-dc1/scylla -L gcs:scylla-backups-gke
 
 Contributions should be submitted as pull requests.

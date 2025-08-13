@@ -19,6 +19,9 @@ else
   fi
   kubectl -n ${scyllaManagerNamespace} delete -f ${scyllaNamespace}.ScyllaManager.yaml
   kubectl -n ${scyllaManagerNamespace} delete scyllaCluster/scylla-manager
+  kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get crd ScyllaDBManagerTask -o name )
+  kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get crd ScyllaDBManagerClusterRegistration -o name )
+  kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get crd ScyllaDBManagerClusterRegistration -o name )
   if [[ ${1} == '-x' ]]; then
     kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name |grep manager)
     kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaManagerNamespace} '.items[] | select(.spec.claimRef.namespace == $ns)  | .metadata.name' )
@@ -163,6 +166,7 @@ data:
       certificate: /var/run/secrets/scylla-server-certs/tls.crt
       keyfile:     /var/run/secrets/scylla-server-certs/tls.key
       truststore:  /var/run/secrets/scylla-server-certs/ca.crt
+      priority_string: "SECURE128:-VERS-ALL:+VERS-TLS1.3"
     server_encryption_options:
       enabled: true
       internode_encryption: all # none, all, dc, rack
