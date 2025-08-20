@@ -27,11 +27,11 @@ spec:
                 operator: In
                 values:
                 - NODESELECTOR
-        # tolerations:
-        # - effect: NoSchedule
-        #   key: scylla-operator.scylladb.com/dedicated
-        #   operator: Equal
-        #   value: scyllaclusters
+        tolerations:
+        - effect: NoSchedule
+          key: scylla-operator.scylladb.com/dedicated
+          operator: Equal
+          value: scyllaclusters
     grafana:
       exposeOptions: {}
         # webInterface:

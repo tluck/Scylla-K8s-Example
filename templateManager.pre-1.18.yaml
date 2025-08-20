@@ -88,18 +88,18 @@ rules:
   - update
   - watch
 
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: scylla-manager
+# ---
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: scylla-manager
 
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: scylla-manager-controller
-  namespace: scylla-manager
+  namespace: NAMESPACE
 spec:
   minAvailable: 1
   selector:
@@ -112,7 +112,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: scylla-manager-controller
-  namespace: scylla-manager
+  namespace: NAMESPACE
   labels:
     app.kubernetes.io/name: scylla-manager-controller
     app.kubernetes.io/instance: scylla-manager
@@ -122,7 +122,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: scylla-manager-config
-  namespace: scylla-manager
+  namespace: NAMESPACE
 data:
   scylla-manager.yaml: |-
     http: :5080
@@ -144,7 +144,7 @@ data:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  namespace: scylla-manager
+  namespace: NAMESPACE
   name: scylla-manager-to-scylla-pod
 spec:
   policyTypes:
@@ -167,7 +167,7 @@ metadata:
     app.kubernetes.io/name: scylla-manager
     app.kubernetes.io/instance: scylla-manager
   name: scylla-manager
-  namespace: scylla-manager
+  namespace: NAMESPACE
 spec:
   ports:
   - name: api
@@ -187,7 +187,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: scylla-manager
-  namespace: scylla-manager
+  namespace: NAMESPACE
   labels:
     app.kubernetes.io/name: scylla-manager
     app.kubernetes.io/instance: scylla-manager
@@ -204,14 +204,14 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: scylla-manager-controller
-  namespace: scylla-manager
+  namespace: NAMESPACE
 
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: scylla-manager-controller
-  namespace: scylla-manager
+  namespace: NAMESPACE
   labels:
     app.kubernetes.io/name: scylla-manager-controller
     app.kubernetes.io/instance: scylla-manager
@@ -260,7 +260,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: scylla-manager
-  namespace: scylla-manager
+  namespace: NAMESPACE
   labels:
     app.kubernetes.io/name: scylla-manager
     app.kubernetes.io/instance: scylla-manager
@@ -346,7 +346,7 @@ apiVersion: scylla.scylladb.com/v1
 kind: ScyllaCluster
 metadata:
   name: scylla-manager
-  namespace: scylla-manager
+  namespace: NAMESPACE
 spec:
   version: DBVERSION
   repository: docker.io/scylladb/scylla-enterprise

@@ -12,7 +12,7 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
   helm uninstall cert-manager     --namespace cert-manager
   helm uninstall scylla-operator  --namespace scylla-operator
 
-  [[ ${backupEnabled} == true ]] && ./deployMinio.bash ${1}
+  [[ ${minioEnabled} == true ]] && ./deployMinio.bash ${1}
 
   if [[ ${1} == '-x' ]]; then
     kubectl delete ns scylla-monitoring
@@ -166,7 +166,7 @@ kubectl -n=local-csi-driver apply --server-side \
 kubectl -n=local-csi-driver rollout status --timeout=10m daemonset.apps/local-csi-driver
 fi
 
-[[ ${backupEnabled} == true ]] && ./deployMinio.bash ${1}
+[[ ${minioEnabled} == true ]] && ./deployMinio.bash ${1}
 fi
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'

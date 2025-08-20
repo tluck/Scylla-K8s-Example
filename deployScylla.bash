@@ -7,34 +7,33 @@ date
 if [[ ${1} == '-d' || ${1} == '-x' ]]; then
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+# deletes CRDs, deployments, pods - but leaves PVCs, configmaps, secrets and services and service accounts (unless using -x)
 if [[ ${helmEnabled} == true ]]; then
   helm uninstall scylla          --namespace ${scyllaNamespace}
   helm uninstall scylla-manager  --namespace ${scyllaManagerNamespace}
 else
-  kubectl -n ${scyllaNamespace} delete scyllaCluster/${clusterName}
-  if [[ ${1} == '-x' ]]; then
-    kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get pvc -o name| grep ${clusterName} | grep -v scylla-manager |grep -v prometheus )
-    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaNamespace} '.items[] | select(.spec.storageClassName=="scylladb-local-xfs" and .spec.claimRef.namespace == $ns) | .metadata.name')
-    kubectl delete ns ${scyllaNamespace}
-  fi
-  kubectl -n ${scyllaManagerNamespace} delete -f ${scyllaNamespace}.ScyllaManager.yaml
+  kubectl -n ${scyllaNamespace}        delete scyllaCluster/${clusterName}
+  kubectl -n ${scyllaManagerNamespace} delete deployment/scylla-manager
   kubectl -n ${scyllaManagerNamespace} delete scyllaCluster/scylla-manager
-  kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get crd ScyllaDBManagerTask -o name )
-  kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get crd ScyllaDBManagerClusterRegistration -o name )
-  kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get crd ScyllaDBManagerClusterRegistration -o name )
-  if [[ ${1} == '-x' ]]; then
-    kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name |grep manager)
-    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaManagerNamespace} '.items[] | select(.spec.claimRef.namespace == $ns)  | .metadata.name' )
-    kubectl delete ns ${scyllaManagerNamespace}
-  fi
+  # kubectl -n ${scyllaManagerNamespace} delete -f ${scyllaNamespace}.ScyllaManager.yaml
 fi
-# delete the cluster monitoring resource
-kubectl -n ${scyllaNamespace} delete -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
-if [[ ${1} == '-x' ]]; then 
-  kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get pvc -o name |grep prometheus)
-  kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaNamespace} '.items[] | select(.spec.claimRef.namespace == $ns ) | .metadata.name' )
-fi
+  kubectl -n ${scyllaNamespace} delete -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 
+# remove the rest of the resources such PCVs, PVs and namespaces
+if [[ ${1} == '-x' ]]; then
+  kubectl -n ${scyllaNamespace} patch  $( kubectl -n ${scyllaNamespace} get ScyllaDBManagerTask -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge
+  kubectl -n ${scyllaNamespace} patch  $( kubectl -n ${scyllaNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge
+  kubectl -n ${scyllaManagerNamespace} patch  $( kubectl -n ${scyllaManagerNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge
+
+  kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get pvc -o name| grep ${clusterName} | grep -v scylla-manager |grep -v prometheus )
+  kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaNamespace} '.items[] | select(.spec.storageClassName=="scylladb-local-xfs" and .spec.claimRef.namespace == $ns) | .metadata.name')
+  kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name | grep manager)
+  kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaManagerNamespace} '.items[] | select(.spec.claimRef.namespace == $ns) | .metadata.name' )
+  kubectl -n ${scyllaNamespace} delete $( kubectl -n ${scyllaNamespace} get pvc -o name | grep prometheus)
+  kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaNamespace} '.items[] | select(.spec.claimRef.namespace == $ns ) | .metadata.name' )
+  kubectl delete ns ${scyllaNamespace}
+  kubectl delete ns ${scyllaManagerNamespace}
+fi
 
 else # deploy 
 
@@ -244,14 +243,14 @@ kubectl -n ${scyllaNamespace} apply --server-side -f ${scyllaNamespace}.ScyllaDB
 # fi
 
 sleep 5
-# patch the configMap to update the grafana.ini file
+# patch the configMap to update the grafana.ini file to reduce the number of dashboards to master
 kubectl -n ${scyllaNamespace} get configmap scylla-grafana-configs -o yaml \
   | sed -e 's|default_home.*json|default_home_dashboard_path = /var/run/dashboards/scylladb/scylladb-master/scylla-overview.master.json|' \
   | kubectl -n ${scyllaNamespace} apply set-last-applied --create-annotation=true -f -
 kubectl -n ${scyllaNamespace} get configmap scylla-grafana-configs -o yaml \
   | sed -e 's|default_home.*json|default_home_dashboard_path = /var/run/dashboards/scylladb/scylladb-master/scylla-overview.master.json|' \
   | kubectl -n ${scyllaNamespace} apply -f -
-# patch the grafana deployment to reduce the number of dashboards to master
+printf "Patching the Grafana deployment to just use the most recent dashboards\n"
 kubectl -n ${scyllaNamespace} patch deployment scylla-grafana --type='json' \
   -p='[{"op": "replace", "path": "/spec/template/spec/initContainers/0/volumeMounts", "value": 
         [{"name": "decompressed-configmaps", 
@@ -302,6 +301,7 @@ EOF
 
 kubectl -n ${scyllaManagerNamespace} delete configmap scylla-manager-config > /dev/null 2>&1
 cat ${templateFile} | sed \
+    -e "s|NAMESPACE|${scyllaManagerNamespace}|g" \
     -e "s|DBVERSION|${dbVersion}|g" \
     -e "s|DEVMODE|${developerMode}|g" \
     -e "s|AGENTVERSION|${agentVersion}|g" \
