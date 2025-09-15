@@ -58,6 +58,16 @@ n=0
 while [ $code -eq 1 ]
 do
 sleep 20
+if [[ ${dataCenterName} == 'dc1' ]]; then
+kubectl -n cert-manager get secret cert-manager-webhook-ca -o jsonpath="{.data['ca\.crt']}"  | base64 -d > ca.crt
+kubectl -n cert-manager get secret cert-manager-webhook-ca -o jsonpath="{.data['tls\.crt']}" | base64 -d > tls.crt
+kubectl -n cert-manager get secret cert-manager-webhook-ca -o jsonpath="{.data['tls\.key']}" | base64 -d > tls.key
+fi
+kubectl -n cert-manager create secret generic my-issuer-secret \
+  --from-file=tls.crt=tls.crt \
+  --from-file=tls.key=tls.key \
+  --from-file=ca.crt=ca.crt \
+  -o yaml --dry-run=client | kubectl apply -f -
 kubectl delete ClusterIssuer/${issuerName} > /dev/null 2>&1
 cat <<EOF | kubectl apply -f - > /dev/null 2>&1
 apiVersion: cert-manager.io/v1
@@ -67,7 +77,7 @@ metadata:
   namespace: ${issuerNamespace}
 spec:
   ca:
-    secretName: cert-manager-webhook-ca #ca-key-pair
+    secretName: my-issuer-secret #cert-manager-webhook-ca #ca-key-pair
 EOF
 code=$?
 n=$((n+1))
@@ -172,4 +182,3 @@ fi
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 
 date
-

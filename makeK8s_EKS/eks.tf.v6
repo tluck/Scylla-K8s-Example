@@ -24,22 +24,114 @@ terraform {
   required_version = ">= 1.3"
 }
 
-provider "aws" {
-  region = var.region
-  # profile = "default"
-}
+# provider "aws" {
+#   region = var.region
+#   # profile = "default"
+# }
 
-data "aws_vpc" "existing_vpc" {
-  id = var.vpc_id
-}
+# data "aws_vpc" "existing_vpc" {
+#   id = var.vpc_id
+# }
 
-# Fetch subnets in the default VPC
-data "aws_subnets" "existing_subnets" {
-  filter {
-    name = "vpc-id"
-    values = [data.aws_vpc.existing_vpc.id] # values = [aws_vpc.existing.id]
+# # Fetch the default VPC
+# resource "aws_vpc" "existing_vpc" {
+#   # assign_generated_ipv6_cidr_block = false
+#   cidr_block = var.vpc_cidr_block
+# }
+
+# # Fetch subnets in the default VPC
+# data "aws_subnets" "existing_subnets" {
+#   filter {
+#     name = "vpc-id"
+#     values = [data.aws_vpc.existing_vpc.id] # values = [aws_vpc.existing.id]
+#   }
+# }
+
+# Create a new VPC
+resource "aws_vpc" "new_vpc" {
+  cidr_block = var.vpc_cidr_block  # change CIDR as needed
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "${local.cluster_name}-vpc"
   }
 }
+
+# Create public subnets in different availability zones (example with two subnets)
+resource "aws_subnet" "public_subnet_1" {
+  vpc_id            = aws_vpc.new_vpc.id
+  cidr_block        = var.subnet_cidr_block1
+  availability_zone = "${var.region}a"  # Change availability zones as required
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "${local.cluster_name}-public-subnet-1"
+  }
+}
+
+resource "aws_subnet" "public_subnet_2" {
+  vpc_id            = aws_vpc.new_vpc.id
+  cidr_block        = var.subnet_cidr_block2
+  availability_zone = "${var.region}b"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "${local.cluster_name}-public-subnet-2"
+  }
+}
+
+resource "aws_subnet" "public_subnet_3" {
+  vpc_id            = aws_vpc.new_vpc.id
+  cidr_block        = var.subnet_cidr_block3
+  availability_zone = "${var.region}c"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "${local.cluster_name}-public-subnet-3"
+  }
+}
+
+
+# (Optional) Create internet gateway and route table to allow public subnet internet access
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.new_vpc.id
+
+  tags = {
+    Name = "${local.cluster_name}-igw"
+  }
+}
+
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.new_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+  
+  tags = {
+    Name = "${local.cluster_name}-public-rt"
+  }
+}
+
+resource "aws_route_table_association" "public_subnet_1_assoc" {
+  subnet_id      = aws_subnet.public_subnet_1.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+resource "aws_route_table_association" "public_subnet_2_assoc" {
+  subnet_id      = aws_subnet.public_subnet_2.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+resource "aws_route_table_association" "public_subnet_3_assoc" {
+  subnet_id      = aws_subnet.public_subnet_3.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+
 
 data "aws_ssm_parameter" "eks_ami" {
   # name = "/aws/service/eks/optimized-ami/${var.eks_nodegroup_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
@@ -59,7 +151,8 @@ locals {
       instance_types               = [local.instance_type2]
       capacity_type                = var.capacity_type
       key_name                     = aws_key_pair.key_pair.key_name
-      subnet_ids                   = [data.aws_subnets.existing_subnets.ids[0]]
+      # subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
+      subnet_ids                   = [aws_subnet.public_subnet_1.id ] #, aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
       version                      = var.eks_nodegroup_version
       release_version              = data.aws_ssm_parameter.eks_ami.value
       desired_size                 = var.ng_2_size
@@ -137,11 +230,6 @@ resource "aws_key_pair" "key_pair" {
   public_key = file(var.ssh_public_key_file)
 }
 
-# Fetch the default VPC
-resource "aws_vpc" "existing_vpc" {
-  # assign_generated_ipv6_cidr_block = false
-  cidr_block = "172.31.0.0/16"
-}
 
 # EKS Module using the default VPC and its subnets
 module "eks" {
@@ -157,8 +245,9 @@ module "eks" {
   create_cloudwatch_log_group              = false # Lets EKS manage log groups
   enabled_log_types                        = []    # Optional: Disables all log types
   enable_irsa                              = true  # set false to disable OIDC provider creation
-  vpc_id                                   = data.aws_vpc.existing_vpc.id
-  subnet_ids                               = data.aws_subnets.existing_subnets.ids
+  vpc_id                                   = aws_vpc.new_vpc.id
+  # subnet_ids                               = data.aws_subnets.existing_subnets.ids
+  subnet_ids                               = [ aws_subnet.public_subnet_1.id, aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
 
   # bootstrap_self_managed_addons      = true
   # Using `most_recent_version = true` for all addons ensures that the latest compatible versions are installed automatically.
@@ -218,7 +307,7 @@ module "eks" {
         from_port   = 443
         to_port     = 443
         protocol    = "tcp"
-        cidr_blocks = ["172.31.0.0/16"]
+        cidr_blocks = [var.vpc_cidr_block]
       }
 
       ingress_allow_webhook = {
@@ -340,20 +429,6 @@ module "eks" {
 
 } # end of module "eks"
 
-resource "aws_eks_addon" "coredns" {
-  depends_on               = [aws_eks_node_group.dedicated, aws_eks_node_group.non-dedicated]
-  cluster_name             = module.eks.cluster_name
-  addon_name               = "coredns"
-  service_account_role_arn = module.irsa-coredns.iam_role_arn
-}
-
-resource "aws_eks_addon" "ebs_csi_driver" {
-  depends_on               = [aws_eks_node_group.dedicated, aws_eks_node_group.non-dedicated]
-  cluster_name             = module.eks.cluster_name
-  addon_name               = "aws-ebs-csi-driver"
-  service_account_role_arn = module.irsa-ebs-csi.iam_role_arn
-}
-
 # Create the launch template for the dedicated node group
 resource "aws_launch_template" "group_lt_0" {
   name = "${var.prefix}group-eks-launch-template-0"
@@ -462,12 +537,27 @@ resource "aws_launch_template" "group_lt_1" {
   }
 }
 
+resource "aws_eks_addon" "coredns" {
+  depends_on               = [aws_eks_node_group.dedicated, aws_eks_node_group.non-dedicated]
+  cluster_name             = module.eks.cluster_name
+  addon_name               = "coredns"
+  service_account_role_arn = module.irsa-coredns.iam_role_arn
+}
+
+resource "aws_eks_addon" "ebs_csi_driver" {
+  depends_on               = [aws_eks_node_group.dedicated, aws_eks_node_group.non-dedicated]
+  cluster_name             = module.eks.cluster_name
+  addon_name               = "aws-ebs-csi-driver"
+  service_account_role_arn = module.irsa-ebs-csi.iam_role_arn
+}
+
 # Create a dedicated node group for ScyllaDB
 resource "aws_eks_node_group" "dedicated" {
   cluster_name               = module.eks.cluster_name
   node_group_name            = "dedicated"
   node_role_arn              = aws_iam_role.eks_nodes.arn
-  subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
+  # subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
+  subnet_ids                 = [aws_subnet.public_subnet_1.id ] #, aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
   instance_types             = [local.instance_type0]
   capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT" 
   version                    = var.eks_nodegroup_version
@@ -494,7 +584,8 @@ resource "aws_eks_node_group" "non-dedicated" {
   cluster_name               = module.eks.cluster_name
   node_group_name            = "non-dedicated"
   node_role_arn              = aws_iam_role.eks_nodes.arn
-  subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
+  # subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
+  subnet_ids                 = [aws_subnet.public_subnet_1.id ] #, aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
   instance_types             = [local.instance_type1]
   capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT" 
   version                    = var.eks_nodegroup_version
@@ -518,7 +609,7 @@ resource "aws_eks_node_group" "non-dedicated" {
 
 # Create the IAM role for EKS worker nodes
 resource "aws_iam_role" "eks_nodes" {
-  name = "eks-node-group-role"
+  name = "${module.eks.cluster_name}-EKS-node-group-Role"
   assume_role_policy = data.aws_iam_policy_document.eks_nodes_assume_role_policy.json
 }
 
@@ -552,7 +643,7 @@ module "irsa-ebs-csi" {
 source = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version = "5.40.0"
   create_role                   = true
-  role_name                     = "AmazonEKSTFEBSCSIRole-${module.eks.cluster_name}"
+  role_name                     = "${module.eks.cluster_name}-AmazonEKSTFEBSCSIRole"
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = ["arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"] # [data.aws_iam_policy.ebs_csi_policy.arn]
   oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
@@ -563,7 +654,7 @@ module "irsa-kube-proxy" {
   source = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version = "5.40.0"
   create_role                   = true
-  role_name                     = "AmazonEKSTFKubeProxyRole-${module.eks.cluster_name}"
+  role_name                     = "${module.eks.cluster_name}-AmazonEKSTFKubeProxyRole"
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = []
   oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:kube-proxy"]
@@ -574,7 +665,7 @@ module "irsa-coredns" {
   source = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version = "5.40.0"
   create_role                   = true
-  role_name                     = "AmazonEKSTFCorednsRole-${module.eks.cluster_name}"
+  role_name                     = "${module.eks.cluster_name}-AmazonEKSTFCorednsRole"
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = []
   oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:coredns"]
@@ -584,7 +675,7 @@ data "aws_caller_identity" "current" {}
 
 # Create the IAM role with the correct trust policy for Pod Identity
 resource "aws_iam_role" "vpc_cni_pod_identity" {
-  name = "AmazonEKSPodIdentityAmazonVPCCNIRole-${module.eks.cluster_name}"
+  name = "${module.eks.cluster_name}-AmazonEKSPodIdentityAmazonVPCCNIRole"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -626,7 +717,7 @@ module "irsa-vpc-cni" {
   source = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version = "5.40.0"
   create_role                   = true
-  role_name                     = "AmazonEKSTFVPCNIRole-${module.eks.cluster_name}"
+  role_name                     = "${module.eks.cluster_name}-AmazonEKSTFVPCNIRole"
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = ["arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy","arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"]
   oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:vpc-cni"]

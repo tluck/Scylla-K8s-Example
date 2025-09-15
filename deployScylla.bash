@@ -113,8 +113,11 @@ spec:
     - ${scyllaNamespace}-rack1-0.${scyllaNamespace}.svc
     - ${scyllaNamespace}-rack1-1.${scyllaNamespace}.svc
     - ${scyllaNamespace}-rack1-2.${scyllaNamespace}.svc
+    - ${scyllaNamespace}-rack1-0.scylla-client.${scyllaNamespace}.svc.cluster.local
+    - ${scyllaNamespace}-rack1-1.scylla-client.${scyllaNamespace}.svc.cluster.local
+    - ${scyllaNamespace}-rack1-2.scylla-client.${scyllaNamespace}.svc.cluster.local
     - scylla-client.${scyllaNamespace}.svc
-    - scylla-client
+    - scylla-client.${scyllaNamespace}.svc.cluster.local
   issuerRef:
     name: myclusterissuer
     kind: ClusterIssuer
@@ -134,9 +137,10 @@ else
   certAuth="# "
   printf "Using username/password authentication for Scylla\n"
 fi 
+[[ ${enableAlternator} == true ]] && alt=""|| alt="#ALT "; 
 # create a configMap to define Scylla options
 kubectl -n ${scyllaNamespace} delete configmap scylla-config > /dev/null 2>&1
-if [[ ${enableSecurity} == true && ${helmEnabled} == false ]]; then
+if [[ ${enableAuth} == true && ${helmEnabled} == false ]]; then
 printf "Creating a configMap to define the basic Scylla config properties\n"
 kubectl -n ${scyllaNamespace} apply --server-side -f=- <<EOF
 apiVersion: v1
@@ -155,26 +159,29 @@ data:
     ${certAuth}    query: DNS=([^,\s]+)
     ${certAuth}  - source: SUBJECT
     ${certAuth}     query: CN\s*=\s*([^,\s]+)
+    sstable_compression_dictionaries_retrain_period_in_seconds: 600 # 86400 (24 hours)
+    sstable_compression_dictionaries_autotrainer_tick_period_in_seconds: 180 # 900 (15 minutes)
+    sstable_compression_dictionaries_min_training_dataset_bytes: 1048576 # 1073741824 (1GB)
     # # Other options
     client_encryption_options:
-      enabled: true
+      enabled: ${enableTLS}
       ${certAuth}require_client_auth: true
-      # certificate: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.crt
-      # keyfile: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.key
-      # truststore: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca/ca-bundle.crt
       certificate: /var/run/secrets/scylla-server-certs/tls.crt
       keyfile:     /var/run/secrets/scylla-server-certs/tls.key
       truststore:  /var/run/secrets/scylla-server-certs/ca.crt
       priority_string: "SECURE128:-VERS-ALL:+VERS-TLS1.3"
-    server_encryption_options:
-      enabled: true
-      internode_encryption: all # none, all, dc, rack
       # certificate: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.crt
       # keyfile: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.key
       # truststore: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca/ca-bundle.crt
+    server_encryption_options:
+      enabled: ${enableTLS}
+      internode_encryption: all # none, all, dc, rack
       certificate: /var/run/secrets/scylla-server-certs/tls.crt
       keyfile:     /var/run/secrets/scylla-server-certs/tls.key
       truststore:  /var/run/secrets/scylla-server-certs/ca.crt
+      # certificate: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.crt
+      # keyfile: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.key
+      # truststore: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca/ca-bundle.crt
 EOF
 
 # # Generate the server certificate using the cert-issuer 
@@ -191,6 +198,7 @@ else
   printf "Creating the ScyllaCluster resource via Kubectl\n"
   templateFile="templateCluster.yaml"
 fi
+#
 [[ ${dataCenterName} != "dc1" ]] && mdc="" || mdc="#MDC "
 cat ${templateFile} | sed \
     -e "s|NAMESPACE|${scyllaNamespace}|g" \
@@ -207,6 +215,14 @@ cat ${templateFile} | sed \
     -e "s|#BAK |${bak}|g" \
     -e "s|#GCS |${gcs}|g" \
     -e "s|#MDC |${mdc}|g" \
+    -e "s|#ALT |${alt}|g" \
+    -e "s|WRITEISOLATION|${writeIsolation}|g" \
+    -e "s|EXTERNAL-SEED-1|${externalSeeds[0]}|g" \
+    -e "s|EXTERNAL-SEED-2|${externalSeeds[1]}|g" \
+    -e "s|EXTERNAL-SEED-3|${externalSeeds[2]}|g" \
+    -e "s|BROADCASTTYPE|${broadcastType}|g" \
+    -e "s|NODESERVICETYPE|${nodeServiceType}|g" \
+    -e "s|NODESELECTOR|${nodeSelector0}|g" \
     -e "s|NODESELECTOR|${nodeSelector0}|g" \
     > ${scyllaNamespace}.ScyllaCluster.yaml
 if [[ ${helmEnabled} == true ]]; then
@@ -221,6 +237,8 @@ fi
 printf "Waiting for ScyllaCluster/scylla resources to be ready within ${waitPeriod} \n" 
 sleep 5 
 kubectl -n ${scyllaNamespace} wait ScyllaCluster/scylla --for=condition=Available=True --timeout=${waitPeriod}
+kubectl get pods ${scyllaNamespace}-rack1-0 ${scyllaNamespace}-rack1-1 ${scyllaNamespace}-rack1-2 -o json -n ${scyllaNamespace}\
+  | jq -r '.items[]| "\(.metadata.name) \(.status.podIP)"  '
 
 if [[ ${clusterOnly} == true ]]; then
   printf "\n%s\n" '-----------------------------------------------------------------------------------------------'

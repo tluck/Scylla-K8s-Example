@@ -8,6 +8,9 @@ spec:
   version: DBVERSION # 2024.2.7
   developerMode: DEVMODE
   scyllaArgs: "--smp=CPULIMIT" # "--poll-mode"
+  #ALT alternator:
+  #ALT   port: 8000
+  #ALT   writeIsolation: WRITEISOLATION
   repairs:
     - name: weekly-repair
       cron: "0 0 * * 0" # Every Sunday at midnight       
@@ -18,18 +21,21 @@ spec:
   exposeOptions:
     broadcastOptions:
       clients:
-        type: PodIP
+        type: BROADCASTTYPE
       nodes:
-        type: PodIP
+        type: BROADCASTTYPE
     nodeService:
-      type: Headless
+      type: NODESERVICETYPE
   cpuset: true # deprecated
   sysctls:
     - fs.aio-max-nr=30000000
     - fs.nr_open=1073741816
     - fs.file-max=9223372036854775807
   #MDC externalSeeds:
-  #MDC   - NAMESPACE-rack1-0.NAMESPACE
+  #MDC  - EXTERNAL-SEED-1
+  #MDC  - EXTERNAL-SEED-2
+  #MDC  - EXTERNAL-SEED-3
+  #MDC#   - NAMESPACE1-rack1-0.NAMESPACE1
   datacenter:
     name: DATACENTER
     racks:
