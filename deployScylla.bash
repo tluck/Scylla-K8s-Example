@@ -243,6 +243,7 @@ kubectl get pods ${scyllaNamespace}-rack1-0 ${scyllaNamespace}-rack1-1 ${scyllaN
 if [[ ${clusterOnly} == true ]]; then
   printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
   printf "Scylla Cluster resources created successfully.\n"
+  ./port_forward.bash
   exit 0
 fi
 
