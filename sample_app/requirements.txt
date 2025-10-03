@@ -1,0 +1,6 @@
+pandas
+scylla-driver
+faker
+argparse
+lz4 
+python-snappy

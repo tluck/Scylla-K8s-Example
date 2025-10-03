@@ -131,11 +131,12 @@ resource "aws_route_table_association" "public_subnet_3_assoc" {
   route_table_id = aws_route_table.public_rt.id
 }
 
-
-
-data "aws_ssm_parameter" "eks_ami" {
-  # name = "/aws/service/eks/optimized-ami/${var.eks_nodegroup_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
+data "aws_ssm_parameter" "eks_ami_x86" {
   name = "/aws/service/eks/optimized-ami/${var.eks_nodegroup_version}/amazon-linux-2023/x86_64/standard/recommended/release_version"
+}
+
+data "aws_ssm_parameter" "eks_ami_arm64" {
+  name = "/aws/service/eks/optimized-ami/${var.eks_nodegroup_version}/amazon-linux-2023/arm64/standard/recommended/release_version"
 }
 
 # Get the security group ID from the cluster configuration
@@ -154,7 +155,7 @@ locals {
       # subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
       subnet_ids                   = [aws_subnet.public_subnet_1.id ] #, aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
       version                      = var.eks_nodegroup_version
-      release_version              = data.aws_ssm_parameter.eks_ami.value
+      release_version              = data.aws_ssm_parameter.eks_ami_x86.value
       desired_size                 = var.ng_2_size
       min_size                     = 0
       max_size                     = 3
@@ -349,7 +350,7 @@ module "eks" {
   #     key_name                   = aws_key_pair.key_pair.key_name
   #     subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
   #     version                    = var.eks_nodegroup_version
-  #     release_version            = data.aws_ssm_parameter.eks_ami.value
+  #     release_version            = data.aws_ssm_parameter.eks_ami_x86.value
   #     desired_size               = var.ng_0_size
   #     min_size                   = 0 #var.ng_0_size
   #     max_size                   = 3 #var.ng_0_size
@@ -394,7 +395,7 @@ module "eks" {
   #     key_name                   = aws_key_pair.key_pair.key_name
   #     subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
   #     version                    = var.eks_nodegroup_version
-  #     release_version            = data.aws_ssm_parameter.eks_ami.value
+  #     release_version            = data.aws_ssm_parameter.eks_ami_x86.value
   #     desired_size               = var.ng_1_size
   #     min_size                   = 0 #var.ng_1_size
   #     max_size                   = 3 #var.ng_1_size
@@ -432,7 +433,7 @@ module "eks" {
 # Create the launch template for the dedicated node group
 resource "aws_launch_template" "group_lt_0" {
   name = "${var.prefix}group-eks-launch-template-0"
-  # image_id = data.aws_ssm_parameter.eks_ami.value
+  # image_id = data.aws_ssm_parameter.eks_ami_x86.value
   # instance_type = local.instance_type0 # i4i.2xlarge"
   key_name = aws_key_pair.key_pair.key_name # Replace with your SSH key pair name
   block_device_mappings {
@@ -503,7 +504,7 @@ resource "aws_launch_template" "group_lt_0" {
 # Create the launch template for the non-dedicated node group
 resource "aws_launch_template" "group_lt_1" {
   name = "${var.prefix}group-eks-launch-template-1"
-  # image_id = data.aws_ssm_parameter.eks_ami.value
+  # image_id = data.aws_ssm_parameter.eks_ami_x86.value
   key_name = aws_key_pair.key_pair.key_name # Replace with your SSH key pair name
   block_device_mappings {
     device_name = "/dev/xvda"
@@ -561,7 +562,8 @@ resource "aws_eks_node_group" "dedicated" {
   instance_types             = [local.instance_type0]
   capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT" 
   version                    = var.eks_nodegroup_version
-  release_version            = data.aws_ssm_parameter.eks_ami.value
+  release_version            = data.aws_ssm_parameter.eks_ami_x86.value
+  ami_type                   = "AL2023_x86_64_STANDARD"
   launch_template {
       id      = aws_launch_template.group_lt_0.id
       version = "$Latest"  # or a specific version number
@@ -589,7 +591,8 @@ resource "aws_eks_node_group" "non-dedicated" {
   instance_types             = [local.instance_type1]
   capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT" 
   version                    = var.eks_nodegroup_version
-  release_version            = data.aws_ssm_parameter.eks_ami.value
+  release_version            = data.aws_ssm_parameter.eks_ami_arm64.value
+  ami_type                   = "AL2023_ARM_64_STANDARD"
   launch_template {
       id      = aws_launch_template.group_lt_1.id
       version = "$Latest"  # or a specific version number

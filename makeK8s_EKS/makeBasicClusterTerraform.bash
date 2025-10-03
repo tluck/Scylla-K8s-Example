@@ -34,6 +34,8 @@ else
     if [[ ! -e .terraform ]]; then
         printf "%s\n" "No .terraform directory found, running terraform init"
         terraform init
+        # fixes a bug
+        ./fix_tf.bash
     fi
     printf "%s\n" "Running terraform ${verb}"
     terraform ${verb} \

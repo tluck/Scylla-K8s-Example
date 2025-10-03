@@ -1,0 +1,17 @@
+# Use the Python 3.12 slim image
+ARG VERSION=3.12-slim
+FROM python:${VERSION}
+
+# Set the working directory in the container
+WORKDIR /app
+
+RUN apt update -y
+RUN apt install -y jq python3-pip git tar vim curl
+# Copy the requirements.txt file and install dependencies
+# Copy the Python script into the container
+COPY requirements.txt run*bash *.py /app
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# run
+CMD ["sleep", "infinity"]
+#CMD ["run_reader.bash"]
