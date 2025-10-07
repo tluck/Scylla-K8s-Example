@@ -151,6 +151,7 @@ data:
   scylla.yaml: |
     # native_transport_port: 9042
     # native_transport_port_ssl: 9142
+    api_address: 0.0.0.0
     authorizer: CassandraAuthorizer
     ${passAuth}authenticator: PasswordAuthenticator
     ${certAuth}authenticator: com.scylladb.auth.CertificateAuthenticator
@@ -237,6 +238,14 @@ fi
 printf "Waiting for ScyllaCluster/scylla resources to be ready within ${waitPeriod} \n" 
 sleep 5 
 kubectl -n ${scyllaNamespace} wait ScyllaCluster/scylla --for=condition=Available=True --timeout=${waitPeriod}
+# Port 10000 is used for the Scylla REST API - patch the service to add this port if not already present
+existing_ports=$(kubectl -n ${scyllaNamespace} get svc ${clusterName}-client -o json)
+port_exists=$(echo "$existing_ports" | jq '.spec.ports[] | select(.name=="api" or .port==10000)' )
+if [ -z "$port_exists" ]; then
+  printf "Patching the scylla-client service to add the api port 10000\n"
+  kubectl -n ${scyllaNamespace} patch svc ${clusterName}-client --type json -p='[{"op":"add","path":"/spec/ports/-","value":{"port":10000,"name":"api","protocol":"TCP"}}]'
+fi
+printf "Nodes and their IP addresses:\n"
 kubectl get pods ${scyllaNamespace}-rack1-0 ${scyllaNamespace}-rack1-1 ${scyllaNamespace}-rack1-2 -o json -n ${scyllaNamespace}\
   | jq -r '.items[]| "\(.metadata.name) \(.status.podIP)"  '
 
@@ -268,6 +277,13 @@ kubectl -n ${scyllaNamespace} get configmap scylla-grafana-configs -o yaml \
   | kubectl -n ${scyllaNamespace} apply set-last-applied --create-annotation=true -f -
 kubectl -n ${scyllaNamespace} get configmap scylla-grafana-configs -o yaml \
   | sed -e 's|default_home.*json|default_home_dashboard_path = /var/run/dashboards/scylladb/scylladb-master/scylla-overview.master.json|' \
+  | kubectl -n ${scyllaNamespace} apply -f -
+printf "Patching the Grafana config for the prometheus source setting the scrape interval to ${scrape_interval}\n"
+kubectl -n ${scyllaNamespace} get configmap scylla-grafana-provisioning -o yaml \
+  | sed -e "s|timeInterval:.*|timeInterval: \"$scrape_interval\"|" \
+  | kubectl -n ${scyllaNamespace} apply set-last-applied --create-annotation=true -f -
+kubectl -n ${scyllaNamespace} get configmap scylla-grafana-provisioning -o yaml \
+  | sed -e "s|timeInterval:.*|timeInterval: \"$scrape_interval\"|" \
   | kubectl -n ${scyllaNamespace} apply -f -
 printf "Patching the Grafana deployment to just use the most recent dashboards\n"
 kubectl -n ${scyllaNamespace} patch deployment scylla-grafana --type='json' \

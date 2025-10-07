@@ -25,8 +25,8 @@ if [[ ${context} == "docker-desktop" ]]; then
   cpu=2
   mem="4Gi"
 else
-  cpu=4
-  mem="8Gi"
+  cpu=2
+  mem="4Gi"
 fi
 
 
@@ -61,8 +61,8 @@ spec:
           cpu: "${cpu}"
           memory: "${mem}"
         requests:
-          cpu: "${cpu}"
-          memory: "${mem}"
+          cpu: 0.5
+          memory: 1Gi
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

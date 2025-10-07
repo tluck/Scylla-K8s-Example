@@ -16,7 +16,7 @@ export zone="${region}-a"
 nodesPerRegion=1 # 1 = 3 total nodes, 2 = 6 total nodes (2 per zone)x(3 zones)
 nodesPerZone=3 # 3 total nodes per zone
 machineType0="n2-standard-8" # SSD based machines for ScyllaDB
-machineType1="e2-standard-4" # general operator and other services
+machineType1="e2-standard-8" # general operator and other services
 # e2-standard-2 2 core x  8 GB
 # e2-standard-4 4 core x 16 GB
 # e2-standard-8 8 core x 32 GB

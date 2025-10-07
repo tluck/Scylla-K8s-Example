@@ -4,6 +4,8 @@ nodes=${NODE_LIST:-scylla-client}
 dc=${DC:-dc1}
 username=${USERNAME:-cassandra}
 password=${PASSWORD:-cassandra}
+if [[ $1 == -* ]] ;then
+opts="$*"
+fi
 
-./loader.py -r $1 -u $username -p $password -s "$nodes" --dc "$dc"
-
+./loader.py -u $username -p $password -s "$nodes" --dc "$dc" $opts

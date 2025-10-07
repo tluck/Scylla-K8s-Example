@@ -22,7 +22,7 @@ parser.add_argument('-u', '--username', default="cassandra", help='Cassandra use
 parser.add_argument('-p', '--password', default="cassandra", help='Cassandra password')
 parser.add_argument('-k', '--keyspace', default="mykeyspace", help='Keyspace name')
 parser.add_argument('-t', '--table', default="myTable", help='Table name')
-parser.add_argument('-r', '--row_count', type=int, action="store", dest="row_count", default=1000)
+parser.add_argument('-r', '--row_count', type=int, action="store", dest="row_count", default=100000)
 parser.add_argument('--cl', dest="consistency_level", default="QUORUM", help="Consistency Level (ONE, TWO, QUORUM, ALL, LOCAL_QUORUM, EACH_QUORUM)")
 parser.add_argument('--dc', dest='local_datacenter', default='dc1', help='Local datacenter name for ScyllaDB')
 parser.add_argument('--minutes', type=int, default=60, help='How long to run (minutes)')
@@ -39,12 +39,19 @@ consistency_level = opts.consistency_level
 ## Define KS + Table
 keyspace = opts.keyspace
 table = opts.table
-
+ 
+# Logging Setup
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+logger.info(f"Connecting to cluster: {hosts} with user {opts.username}")
+logger.info(f"Using keyspace: {opts.keyspace}, table: {opts.table}")
+logger.info(f"Local DC: {opts.local_datacenter}")
+logger.info(f"Row count to insert: {opts.row_count}") 
+logger.info(f"Using consistency level: {opts.consistency_level}") 
 
 class TableQueryRunner:
     def __init__(self, hosts, keyspace, table, username, password):

@@ -3,7 +3,9 @@
 nodes=${NODE_LIST:-scylla-client}
 dc=${DC:-dc1}
 username=${USERNAME:-cassandra}
-password=${PASSWORD:-cassandra}}
+password=${PASSWORD:-cassandra}
+if [[ $1 == -* ]] ;then
+opts="$*"
+fi
 
-./query.py -r $1 -u $username -p $password -s "$nodes" --dc "$dc"
-
+./query.py -u $username -p $password -s "$nodes" --dc "$dc" $opts

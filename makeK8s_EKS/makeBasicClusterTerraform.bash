@@ -45,6 +45,7 @@ else
         -var=ng_0_size=${nodeGroup0size} \
         -var=ng_1_size=${nodeGroup1size} \
         -var=ng_2_size=${nodeGroup2size} \
+        -var="arch=${arch}" \
         -var="instance0=${instance0}" \
         -var="instance1=${instance1}" \
         -var="instance2=${instance2}" \

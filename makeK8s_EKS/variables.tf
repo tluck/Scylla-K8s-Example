@@ -61,6 +61,11 @@ variable "eks_nodegroup_version" {
   default     = "1.32"
 }
 
+variable "arch" {
+  type = string
+  default = "x86_64"
+}
+
 variable "instance0" {
   type    = string
   default = "i4i.2xlarge" #"i3en.2xlarge"
@@ -68,12 +73,12 @@ variable "instance0" {
 
 variable "instance1" {
   type    = string
-  default = "m5a.2xlarge" #"i3en.2xlarge"
+  default = "m5a.2xlarge"
 }
 
 variable "instance2" {
   type    = string
-  default = "r5.xlarge" #"i3en.2xlarge"
+  default = "r5.2xlarge"
 }
 
 variable "ng_0_size" {

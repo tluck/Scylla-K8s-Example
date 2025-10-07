@@ -41,13 +41,15 @@ fi
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 # Install the cert-manager
+status=$(helm status cert-manager --namespace cert-manager 2>&1)
+if [[ ${status} == *"not found"* ]]; then
 printf "Installing the cert manager\n"
 helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set crds.enabled=true \
   --set "nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
   --set "webhook.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
   --set "cainjector.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
   --set "startupapicheck.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}"
-
+fi
 ## fix to create proper certs with a subject.
 issuerNamespace="cert-manager"
 issuerName="myclusterissuer"
@@ -92,6 +94,8 @@ printf "... Done.\n"
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Installing the prometheus-operator via Helm\n"
 # Install Prometheus Operator
+status=$(helm status monitoring --namespace scylla-monitoring 2>&1)
+if [[ ${status} == *"not found"* ]]; then
 helm install monitoring prometheus-community/kube-prometheus-stack \
   --create-namespace \
   --namespace scylla-monitoring \
@@ -101,8 +105,14 @@ helm install monitoring prometheus-community/kube-prometheus-stack \
   --set "kube-state-metrics.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
   --set "prometheus-node-exporter.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
   --set "prometheusOperator.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}"
-
+if [ $? -ne 0 ]; then
+  printf "%s\n" "* * * Error - Launching Prometheus Operator"
+  exit 1
+fi
+fi
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+status=$(helm status scylla-operator --namespace scylla-operator 2>&1)
+if [[ ${status} == *"not found"* ]]; then
 printf "Installing the scylla-operator v${operatorTag} via Helm\n"
 # Install Scylla Operator
 cat templateOperator.yaml | sed \
@@ -112,6 +122,11 @@ cat templateOperator.yaml | sed \
   > scylla-operator.yaml
 [[ ${operatorTag} == "latest" ]] && repo=scylla-latest || repo=scylla
 helm install scylla-operator ${repo}/scylla-operator --create-namespace --namespace scylla-operator -f scylla-operator.yaml --version ${operatorTag}
+if [ $? -ne 0 ]; then
+  printf "%s\n" "* * * Error - Launching Scylla Operator"
+  exit 1
+fi
+fi
 
 # wait
 kubectl -n scylla-operator wait deployment/scylla-operator --for=condition=Available=True --timeout=90s

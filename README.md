@@ -56,12 +56,22 @@ For a multi-dc cluster, change the `init.conf` dataCenterName to dc2 and rerun t
 
 To create a backup, run `create_backup.bash`, or on the mananger pod run for cloud object storege backups:
 
-- update the configuuration with authention:
+- Run the following to update the configuuration with authention:
 `sctool cluster update --username cassandra --password cassandra -c scylla-dc1/scylla`
-- AWS object storage (s3):
+- For AWS/Minio object storage (s3) run:
 `sctool backup -c scylla-dc1/scylla -L s3:scylla-backups`
-- GCP object storage (GCS):
+- For GCP object storage (GCS) run:
 `sctool backup -c scylla-dc1/scylla -L gcs:scylla-backups-gke`
+
+### Sample App
+
+To test the cluster, a sample data loader and query tool can be run in a pod.
+
+- Launch the application pod, by running the `_deploy.bash` in the `sample_app`folder.
+- Use kubectl exec to run a shell to the app pod
+- Data can be loaded into a test schema - run: `./run_loader.bash`
+- Then this new table can queried - run `./run_query.bash`
+- Watch the activity in the grafana site!
 
 ### Destroy
 
