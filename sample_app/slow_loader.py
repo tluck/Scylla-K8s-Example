@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import logging
-from threading import local
 import time
 import datetime
 import random
@@ -9,11 +8,10 @@ import sys
 import argparse
 from venv import logger
 from faker import Faker
-from cassandra.cluster import Cluster
+from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra import ConsistencyLevel
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.auth import PlainTextAuthProvider
-from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra.policies import DCAwareRoundRobinPolicy, TokenAwarePolicy, RoundRobinPolicy
 
 ## Script args and Help

@@ -5,15 +5,15 @@ source init.conf
 # if the account doesnt exist
 # gcloud iam service-accounts create gke-sa --display-name="gke-service-account"
 
-gcloud storage buckets add-iam-policy-binding gs://${gcpBucketName} \
+gcloud storage buckets add-iam-policy-binding gs://${gcsBucketName} \
   --role=roles/storage.objectViewer \
   --member="serviceAccount:${gkeServiceAccount}"
 
-gcloud storage buckets add-iam-policy-binding gs://${gcpBucketName} \
+gcloud storage buckets add-iam-policy-binding gs://${gcsBucketName} \
   --role=roles/storage.objectCreator \
   --member="serviceAccount:${gkeServiceAccount}"
 
-gcloud storage buckets add-iam-policy-binding gs://${gcpBucketName} \
+gcloud storage buckets add-iam-policy-binding gs://${gcsBucketName} \
   --role=roles/storage.objectUser \
   --member="serviceAccount:${gkeServiceAccount}"
 

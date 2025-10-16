@@ -87,8 +87,8 @@ data:
   ${awss3}# access_key_id: ${AWS_ACCESS_KEY_ID}
   ${awss3}# secret_access_key: ${AWS_SECRET_ACCESS_KEY}
   ${awss3}provider: AWS
-  ${awss3}endpoint: https://s3.${awsBucketRegion}.amazonaws.com
-  ${awss3}region: ${awsBucketRegion}
+  ${awss3}endpoint: https://s3.${awsRegion}.amazonaws.com
+  ${awss3}region: ${awsRegion}
 ${gcs}gcs:
 ${gcs}  service_account_file: /etc/scylla-manager-agent/gcs-service-account.json
 " | base64 | tr -d '\n')
@@ -211,8 +211,8 @@ cat ${templateFile} | sed \
     -e "s|CAPACITY|${dbCapacity}|g" \
     -e "s|CPULIMIT|${dbCpuLimit}|g" \
     -e "s|MEMORYLIMIT|${dbMemoryLimit}|g" \
-    -e "s|AWSBUCKETNAME|${awsBucketName}|g" \
-    -e "s|GCPBUCKETNAME|${gcpBucketName}|g" \
+    -e "s|S3BUCKETNAME|${s3BucketName}|g" \
+    -e "s|GCSBUCKETNAME|${gcsBucketName}|g" \
     -e "s|#BAK |${bak}|g" \
     -e "s|#GCS |${gcs}|g" \
     -e "s|#MDC |${mdc}|g" \

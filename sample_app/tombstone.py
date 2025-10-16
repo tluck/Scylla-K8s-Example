@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: latin-1 -*-
 
-import csv
-import sys
-from cassandra.cluster import Cluster
 import time
 import datetime
 import random
 import argparse
-import concurrent.futures
-from faker import Faker
 import random
+from cassandra.cluster import Cluster
 from cassandra import ConsistencyLevel
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.auth import PlainTextAuthProvider

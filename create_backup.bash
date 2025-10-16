@@ -3,9 +3,9 @@
 [[ -e init.conf ]] && source init.conf
 
 if [[ -e gcs-service-account.json && ${context} == *gke* ]]; then
-  location="gcs:${gcpBucketName}"
+  location="gcs:${gcsBucketName}"
 else
-  location="s3:${awsBucketName}"
+  location="s3:${s3BucketName}"
 fi
 
 # check status

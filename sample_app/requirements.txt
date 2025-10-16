@@ -1,6 +1,6 @@
-pandas
 scylla-driver
-faker
 argparse
+pandas
+faker
 lz4 
 python-snappy

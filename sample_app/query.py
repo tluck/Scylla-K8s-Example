@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: latin-1 -*-
 
-from json import load
 import time
 import logging
 import random
@@ -50,8 +49,8 @@ logger = logging.getLogger(__name__)
 logger.info(f"Connecting to cluster: {hosts} with user {opts.username}")
 logger.info(f"Using keyspace: {opts.keyspace}, table: {opts.table}")
 logger.info(f"Local DC: {opts.local_datacenter}")
-logger.info(f"Row count to insert: {opts.row_count}") 
 logger.info(f"Using consistency level: {opts.consistency_level}") 
+logger.info(f"Row count to insert: {opts.row_count}") 
 
 class TableQueryRunner:
     def __init__(self, hosts, keyspace, table, username, password):

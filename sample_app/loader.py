@@ -7,8 +7,8 @@ import random
 import sys
 import argparse
 from faker import Faker
-from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
+from cassandra.concurrent import execute_concurrent_with_args
 from cassandra import ConsistencyLevel
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.policies import DCAwareRoundRobinPolicy, TokenAwarePolicy
@@ -117,8 +117,8 @@ def main():
     logger.info(f"Connecting to cluster: {hosts} with user {opts.username}")
     logger.info(f"Using keyspace: {opts.keyspace}, table: {opts.table}")
     logger.info(f"Local DC: {opts.dc}")
-    logger.info(f"Row count to insert: {opts.row_count}") 
     logger.info(f"Using consistency level: {opts.cl}") 
+    logger.info(f"Row count to insert: {opts.row_count}") 
     try:
         if hosts[0] == '127.0.0.1':
             profile = ExecutionProfile(load_balancing_policy=DCAwareRoundRobinPolicy(local_dc=opts.dc), request_timeout=30)

@@ -36,9 +36,9 @@ sysctls:
 # Scylla Manager Backups task definition
 #BAK backups: #[]
 #BAK   - name: backup
-#BAK     location: [s3:scylla-backups]
+#BAK     location: [s3:S3BUCKETNAME]
 #GCS   - name: gcs
-#GCS     location: [gcs:scylla-backups-gke]
+#GCS     location: [gcs:GCSBUCKETNAME]
 # Scylla Manager Repair task definition
 repairs: []
 # scyllaArgs will be appended to Scylla binary startup parameters.
