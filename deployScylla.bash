@@ -111,11 +111,11 @@ spec:
   dnsNames:
     - cassandra
     - ${scyllaNamespace}-rack1-0.${scyllaNamespace}.svc
-    - ${scyllaNamespace}-rack1-1.${scyllaNamespace}.svc
-    - ${scyllaNamespace}-rack1-2.${scyllaNamespace}.svc
+    - ${scyllaNamespace}-rack2-0.${scyllaNamespace}.svc
+    - ${scyllaNamespace}-rack3-0.${scyllaNamespace}.svc
     - ${scyllaNamespace}-rack1-0.scylla-client.${scyllaNamespace}.svc.cluster.local
-    - ${scyllaNamespace}-rack1-1.scylla-client.${scyllaNamespace}.svc.cluster.local
-    - ${scyllaNamespace}-rack1-2.scylla-client.${scyllaNamespace}.svc.cluster.local
+    - ${scyllaNamespace}-rack2-0.scylla-client.${scyllaNamespace}.svc.cluster.local
+    - ${scyllaNamespace}-rack3-0.scylla-client.${scyllaNamespace}.svc.cluster.local
     - scylla-client.${scyllaNamespace}.svc
     - scylla-client.${scyllaNamespace}.svc.cluster.local
   issuerRef:
@@ -163,6 +163,7 @@ data:
     sstable_compression_dictionaries_retrain_period_in_seconds: 600 # 86400 (24 hours)
     sstable_compression_dictionaries_autotrainer_tick_period_in_seconds: 180 # 900 (15 minutes)
     sstable_compression_dictionaries_min_training_dataset_bytes: 1048576 # 1073741824 (1GB)
+    allowed_repair_based_node_ops: []
     # # Other options
     client_encryption_options:
       enabled: ${enableTLS}
@@ -223,8 +224,7 @@ cat ${templateFile} | sed \
     -e "s|EXTERNAL-SEED-3|${externalSeeds[2]}|g" \
     -e "s|BROADCASTTYPE|${broadcastType}|g" \
     -e "s|NODESERVICETYPE|${nodeServiceType}|g" \
-    -e "s|NODESELECTOR|${nodeSelector0}|g" \
-    -e "s|NODESELECTOR|${nodeSelector0}|g" \
+    -e "s|NODESELECTOR|${nodeSelector1}|g" \
     > ${scyllaNamespace}.ScyllaCluster.yaml
 if [[ ${helmEnabled} == true ]]; then
   helm install scylla scylla/scylla --create-namespace --namespace ${scyllaNamespace} -f ${scyllaNamespace}.ScyllaCluster.yaml
@@ -246,7 +246,7 @@ if [ -z "$port_exists" ]; then
   kubectl -n ${scyllaNamespace} patch svc ${clusterName}-client --type json -p='[{"op":"add","path":"/spec/ports/-","value":{"port":10000,"name":"api","protocol":"TCP"}}]'
 fi
 printf "Nodes and their IP addresses:\n"
-kubectl get pods ${scyllaNamespace}-rack1-0 ${scyllaNamespace}-rack1-1 ${scyllaNamespace}-rack1-2 -o json -n ${scyllaNamespace}\
+kubectl get pods ${scyllaNamespace}-rack1-0 ${scyllaNamespace}-rack2-0 ${scyllaNamespace}-rack3-0 -o json -n ${scyllaNamespace}\
   | jq -r '.items[]| "\(.metadata.name) \(.status.podIP)"  '
 
 if [[ ${clusterOnly} == true ]]; then
@@ -265,7 +265,7 @@ cat templateDBMonitoring.yaml | sed \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     -e "s|MONITORCAPACITY|${monitoringCapacity}|g" \
-    -e "s|NODESELECTOR|${nodeSelector1}|g" \
+    -e "s|NODESELECTOR|${nodeSelector0}|g" \
     > ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 kubectl -n ${scyllaNamespace} apply --server-side -f ${scyllaNamespace}.ScyllaDBMonitoring.yaml
 # fi
@@ -349,7 +349,7 @@ cat ${templateFile} | sed \
     -e "s|MANAGERDBCPULIMIT|${managerDbCpuLimit}|g" \
     -e "s|MANAGERDBMEMORYLIMIT|${managerDbMemoryLimit}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
-    -e "s|NODESELECTOR|${nodeSelector1}|g" \
+    -e "s|NODESELECTOR|${nodeSelector0}|g" \
     > ${scyllaNamespace}.ScyllaManager.yaml
 if [[ ${helmEnabled} == true ]]; then
   helm install scylla-manager scylla/scylla-manager --create-namespace --namespace ${scyllaManagerNamespace} -f ${scyllaNamespace}.ScyllaManager.yaml

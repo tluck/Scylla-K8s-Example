@@ -23,7 +23,7 @@ parser.add_argument('-k', '--keyspace', default="mykeyspace", help='Keyspace nam
 parser.add_argument('-t', '--table', default="myTable", help='Table name')
 parser.add_argument('-r', '--row_count', type=int, action="store", dest="row_count", default=10000)
 parser.add_argument('-d', '--drop', action="store_true", help='Drop keyspace if exists')
-parser.add_argument('--cl', dest="consistency_level", default="QUORUM", help="Consistency Level (ONE, TWO, QUORUM, ALL, LOCAL_QUORUM, EACH_QUORUM)")
+parser.add_argument('--cl', dest="consistency_level", default="LOCAL_QUORUM", help="Consistency Level (ONE, TWO, QUORUM, ALL, LOCAL_QUORUM, EACH_QUORUM)")
 parser.add_argument('--dc', dest='local_dc', default='dc1', help='Local datacenter name for ScyllaDB')
 opts = parser.parse_args()
 

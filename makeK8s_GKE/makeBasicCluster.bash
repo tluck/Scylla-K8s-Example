@@ -15,8 +15,9 @@ export zone="${region}-a"
 # domain="${clusterDomain:-sdb.com}"
 nodesPerRegion=1 # 1 = 3 total nodes, 2 = 6 total nodes (2 per zone)x(3 zones)
 nodesPerZone=3 # 3 total nodes per zone
-machineType0="n2-standard-8" # SSD based machines for ScyllaDB
-machineType1="e2-standard-8" # general operator and other services
+machineType0="e2-standard-8" # general operator and other services
+machineType1="n2-standard-8" # SSD based machines for ScyllaDB
+machineType2="c4a-standard-8" # arm64 application nodes
 # e2-standard-2 2 core x  8 GB
 # e2-standard-4 4 core x 16 GB
 # e2-standard-8 8 core x 32 GB
@@ -33,11 +34,11 @@ gcloud container clusters ${verb} ${clusterName} --${gkeLocation}="${!gkeLocatio
   --tier "standard" \
   --cluster-version="latest" \
   --num-nodes=${nodesPerZone} \
-  --machine-type "${machineType1}" \
+  --machine-type "${machineType0}" \
   --image-type=${imageType} \
   --disk-size=${rootDiskSize} \
   --system-config-from-file=systemconfig.yaml \
-  --node-labels="scylla.scylladb.com/node-type=${nodeSelector1}" \
+  --node-labels="scylla.scylladb.com/node-type=${nodeSelector0}" \
   --no-enable-autoupgrade \
   --no-enable-autorepair
 # create a dedicated node pool for ScyllaDB (SSD and CPU optimized)
@@ -45,14 +46,25 @@ gcloud container node-pools create "dedicated-pool" \
   --cluster ${clusterName} \
   --${gkeLocation}="${!gkeLocation}" \
   --num-nodes=${nodesPerZone} \
-  --machine-type "${machineType0}" \
+  --machine-type "${machineType1}" \
   --image-type=${imageType} \
   --disk-type='pd-ssd' \
   --disk-size=${rootDiskSize} \
   --local-nvme-ssd-block count=1 \
   --system-config-from-file=systemconfig.yaml \
-  --node-labels="scylla.scylladb.com/node-type=${nodeSelector0}" \
+  --node-labels="scylla.scylladb.com/node-type=${nodeSelector1}" \
   --node-taints='scylla-operator.scylladb.com/dedicated=scyllaclusters:NoSchedule' \
+  --no-enable-autoupgrade \
+  --no-enable-autorepair
+gcloud container node-pools create "application-pool" \
+  --cluster ${clusterName} \
+  --${gkeLocation}="${!gkeLocation}" \
+  --num-nodes=1 \
+  --machine-type "${machineType2}" \
+  --image-type=${imageType} \
+  --disk-size=${rootDiskSize} \
+  --system-config-from-file=systemconfig.yaml \
+  --node-labels="scylla.scylladb.com/node-type=${nodeSelector2}" \
   --no-enable-autoupgrade \
   --no-enable-autorepair
 set +x
@@ -63,8 +75,10 @@ set +x
 #    --node-labels="expire-on=${expire},owner=thomas_luckenbach,purpose=opportunity"
 
 gcloud container clusters get-credentials ${clusterName} --${gkeLocation}="${!gkeLocation}" --project="${PROJECT_ID}"
-
 sleep 5
+
+# remove taint for arm64 nodes to allow scheduling
+# kubectl taint nodes -l kubernetes.io/arch=arm64 scylla-operator.scylladb.com/dedicated:NoSchedule-
 
 # fix for xfs
 # kubectl apply -f ubuntu-xfs-installer.yaml

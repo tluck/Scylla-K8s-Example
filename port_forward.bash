@@ -28,20 +28,19 @@ kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-client  10000:
 
 # 
 if [[ ${enableAlternator} == true ]]; then
-printf "Port-forward service/${clusterName}-client 8000:8000\n"
-kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-client  8000:8000 > /dev/null 2>&1 &
-
-printf "Port-forward service/${clusterName}-client 8043:8043\n"
-kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-client  8043:8043 > /dev/null 2>&1 &
+  printf "Port-forward service/${clusterName}-client 8000:8000\n"
+  kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-client  8000:8000 > /dev/null 2>&1 &
+  printf "Port-forward service/${clusterName}-client 8043:8043\n"
+  kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-client  8043:8043 > /dev/null 2>&1 &
 fi
 
 username=$( kubectl -n ${scyllaNamespace} get secret/scylla-grafana-admin-credentials --template '{{ index .data "username" }}' | base64 -d )
-if [[ ! -z ${username} ]]; then
-printf "Port-forward service/${clusterName}-grafana 3000:3000\n"
-kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-grafana 3000:3000 > /dev/null 2>&1 &
-printf "Port-forward service/${clusterName}-prometheus 9090:9090\n"
-kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-prometheus 9090:9090 > /dev/null 2>&1 &
-
 password=$( kubectl -n ${scyllaNamespace} get secret/scylla-grafana-admin-credentials --template '{{ index .data "password" }}' | base64 -d )
 printf  "\nGrafana credentials: \n\thttps://localhost:3000 \n\tUsername: ${username} \n\tPassword: ${password} \n\n"
+
+if [[ ! -z ${username} ]]; then
+  printf "Port-forward service/${clusterName}-grafana 3000:3000\n"
+  kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-grafana 3000:3000 > /dev/null 2>&1 &
+  printf "Port-forward service/${clusterName}-prometheus 9090:9090\n"
+  kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-prometheus 9090:9090 > /dev/null 2>&1 &
 fi

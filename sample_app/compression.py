@@ -1,142 +1,182 @@
 #!/usr/bin/env python3
-# -*- coding: latin-1 -*-
 
+import logging
 import time
 import datetime
 import random
+import sys
 import argparse
 from faker import Faker
-import random
-from cassandra.cluster import Cluster
-from cassandra import ConsistencyLevel
+from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra.concurrent import execute_concurrent_with_args
+from cassandra import ConsistencyLevel
 from cassandra.auth import PlainTextAuthProvider
+from cassandra.policies import DCAwareRoundRobinPolicy, TokenAwarePolicy
 
-## Script args and Help
-parser = argparse.ArgumentParser(add_help=True)
-parser.add_argument('-s', '--hosts', default="127.0.0.1", help='Comma-separated ScyllaDB node Names or IPs')
-parser.add_argument('-u', '--username', default="cassandra", help='Cassandra username')
-parser.add_argument('-p', '--password', default="cassandra", help='Cassandra password')
-parser.add_argument('-k', '--keyspace', default="compression", help='Keyspace name')
-parser.add_argument('-d', '--drop', action="store_true", help='Drop keyspace if exists')
-parser.add_argument('-r', '--row_count', type=int, action="store", dest="row_count", default=100000)
-opts = parser.parse_args()
+# Constants
+COMPRESSION = "'sstable_compression': 'ZstdWithDictsCompressor'"
+TABLETS = "true"
+DATE_FORMAT = '%Y-%m-%d'
+LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 
-hosts = [h.strip() for h in opts.hosts.split(',') if h.strip()]
-username = opts.username
-password = opts.password
-row_count = int(opts.row_count)
-## Define KS + Table
-keyspace = opts.keyspace
-tablets = "true"
-drop_keyspace = opts.drop
-print ("row_count: %d" % row_count)
+# Logging Setup
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
+logger = logging.getLogger(__name__)
 
-def strTimeProp(start, end, format, prop):
-    stime = time.mktime(time.strptime(start, format))
-    etime = time.mktime(time.strptime(end, format))
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-s', '--hosts', default="127.0.0.1", help='Comma-separated ScyllaDB node Names or IPs')
+    parser.add_argument('-u', '--username', default="cassandra", help='Cassandra username')
+    parser.add_argument('-p', '--password', default="cassandra", help='Cassandra password')
+    parser.add_argument('-k', '--keyspace', default="mykeyspace", help='Keyspace name')
+    parser.add_argument('-d', '--drop', action="store_true", help='Drop keyspace if exists')
+    parser.add_argument('-r', '--row_count', type=int, default=100000, help='Number of rows to insert')
+    parser.add_argument('-l', '--level', type=int, default=3, help='zstd compression level')
+    parser.add_argument('-b', '--batch_size', type=int, default=2000, help='Batch size for inserts')
+    parser.add_argument('--cl', default="LOCAL_QUORUM", help="Consistency Level (ONE, TWO, QUORUM, etc.)")
+    parser.add_argument('--dc', default='dc1', help='Local datacenter name for ScyllaDB')
+
+    return parser.parse_args()
+
+def str_time_prop(start, end, fmt, prop):
+    """Return a time at a proportion of a range of two formatted times."""
+    stime = time.mktime(time.strptime(start, fmt))
+    etime = time.mktime(time.strptime(end, fmt))
     ptime = stime + prop * (etime - stime)
-    return time.strftime(format, time.localtime(ptime))
+    return time.strftime(fmt, time.localtime(ptime))
 
-def randomDate(start, end, prop):
-    return strTimeProp(start, end, '%Y-%m-%d', prop)
+def random_date(start, end, prop):
+    return str_time_prop(start, end, DATE_FORMAT, prop)
 
-def insert_data(session, row_count, table, compression):
-    print("")
-    print("## Creating schema")
-    now = datetime.datetime.now()
-    print(now.strftime("%Y-%m-%d %H:%M:%S"))
-    # You do NOT need to recreate the session or cluster here!
-    
+def create_schema(session, keyspace, table, tablets, compression):
+    logger.info("Creating keyspace and table (if not exists).")
     create_ks = f"""
         CREATE KEYSPACE IF NOT EXISTS {keyspace}
         WITH replication = {{'class' : 'org.apache.cassandra.locator.NetworkTopologyStrategy', 'replication_factor' : 3}}
         AND tablets = {{'enabled': {tablets} }};
     """
-    create_t1 = f"""CREATE TABLE IF NOT EXISTS {keyspace}.{table}
-        (id int, ssn text, imei text, os text, phonenum text, balance float, pdate date, v1 text, v2 text, v3 text, v4 text, v5 text,
-        PRIMARY KEY (id))
+    create_table = f"""CREATE TABLE IF NOT EXISTS {keyspace}.{table}
+        (id int PRIMARY KEY, ssn text, imei text, os text, phonenum text, balance float, pdate date, v1 text, v2 text, v3 text, v4 text, v5 text)
         WITH compression = {{ {compression} }}
         ;"""
     session.execute(create_ks)
-    session.execute(create_t1)
+    session.execute(create_table)
 
-    # Prepare and insert data, as before...
-    # (rest of your function unchanged)
-    # ...
-    print("## Preparing CQL statement")
-    cql = f"""INSERT INTO {keyspace}.{table} (id, ssn, imei, os, phonenum, balance, pdate, v1, v2, v3, v4, v5) VALUES (?,?,?,?,?,?,?, ?,?,?,?,?) using TIMESTAMP ?"""
-    cql_prepared = session.prepare(cql)
-    cql_prepared.consistency_level = ConsistencyLevel.ONE
-    print("")
+def generate_row(fake, i):
+    ssn = '-'.join([str(random.randint(100,999)), str(random.randint(10,99)), str(random.randint(1000,9999))])
+    imei = str(random.randint(100000000000000,999999999999999))
+    os = random.choice(['Android','iOS','Windows','Samsung','Nokia'])
+    phone = '-'.join([str(random.randint(200,999)), str(random.randint(100,999)), str(random.randint(1000,9999))])
+    bal = round(random.uniform(10.5, 999.5), 2)
+    dat = random_date("2019-01-01", "2019-04-01", random.random())
+    base_string = f"IMEI:{imei}|OS:{os}|Phone:{phone}"
+    v = []
+    for _ in range(5):
+        if len(base_string) < 200:
+            sentences = []
+            while sum(len(s) for s in sentences) < 200 - len(base_string):
+                sentences.append(fake.sentence())
+            padding = ' '.join(sentences)[:200 - len(base_string)]
+            v.append(base_string + padding)
+        else:
+            v.append(base_string[:200])
+    return (i, ssn, imei, os, phone, bal, dat, *v)
 
-    i = 0
-    while i < row_count:
-        ssn1 = [str(random.randint(100,999)), str(random.randint(10,99)), str(random.randint(1000,9999))]
-        ssn = '-'.join(ssn1)
-        imei = str(random.randint(100000000000000,999999999999999))
-        os1 = ['Android','iOS','Windows','Samsung','Nokia']
-        os = random.choice(os1)
-        phone1 = [str(random.randint(200,999)), str(random.randint(100,999)), str(random.randint(1000,9999))]
-        phone = '-'.join(phone1)
-        bal = round(random.uniform(10.5,999.5), 2)
-        dat = randomDate("2019-01-01", "2019-04-01", random.random())
+def chunked(iterable, batch_size):
+    """Yield successive chunk_size-sized chunks from iterable."""
+    for i in range(0, len(iterable), batch_size):
+        yield iterable[i:i + batch_size]
 
-        v = [None] * 5
-        for j in range(5):
-            base_string = f"IMEI:{imei}|OS:{os}|Phone:{phone}"
+def insert_data(session, keyspace, table, tablets, compression, consistency_level, row_count, batch_size):
+    create_schema(session, keyspace, table, tablets, compression)
+    cql = f"""INSERT INTO {keyspace}.{table} (id, ssn, imei, os, phonenum, balance, pdate, v1, v2, v3, v4, v5) VALUES (?,?,?,?,?,?,?, ?,?,?,?,?)"""
+    prepared = session.prepare(cql)
+    prepared.consistency_level = getattr(ConsistencyLevel, consistency_level)
+    fake = Faker()
 
-            # if len(base_string) < 200:
-            #     padding = ''.join(random.choices('      ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=200 - len(base_string)))
-            #     final_string = base_string + padding
-            # else:
-            #     final_string = base_string[:200]
-            # v[j] = final_string
-            fake = Faker()
-            if len(base_string) < 200:
-                # Generate enough fake sentences to reach the desired length
-                sentences = []
-                while sum(len(s) for s in sentences) < 200 - len(base_string):
-                    sentences.append(fake.sentence())
-                padding = ' '.join(sentences)
-                # Trim to exactly fit 200 characters
-                padding = padding[:200 - len(base_string)]
-                v[j] = base_string + padding
-            else:
-                v[j] = base_string[:200]
+    logger.info(f'Inserting {row_count} rows with batch size={batch_size}')
 
-        if (i % 1000 == 0):
-            now = datetime.datetime.now()
-            print("inserted records:", i, now.strftime("%Y-%m-%d %H:%M:%S"))
-        i += 1
-        session.execute(cql_prepared, (i, ssn, imei, os, phone, bal, dat, v[0], v[1], v[2], v[3], v[4]))
-    now = datetime.datetime.now()
-    print("inserted records:", i, now.strftime("%Y-%m-%d %H:%M:%S"))
+    total_failed = 0
+    for batch_num in range(1, (row_count // batch_size) + 2):
+        start_idx = (batch_num - 1) * batch_size + 1
+        end_idx = min(batch_num * batch_size, row_count)
+        if start_idx > row_count:
+            break
+        batch = [generate_row(fake, i) for i in range(start_idx, end_idx + 1)]
+        results = execute_concurrent_with_args(session, prepared, batch, concurrency=100)
+        failed = sum(1 for (success, _) in results if not success)
+        now = datetime.datetime.now()
+        logger.info('Batch %d: %d rows, %d failures at %s' % (batch_num, len(batch), failed, now.strftime('%Y-%m-%d %H:%M:%S')))
+        total_failed += failed
+
+    logger.info(f'All batches done, total insertion failures: {total_failed}')
+
+opts = parse_args()
+
+def main():
+    table = [ "comp_w_none",
+              "comp_w_zstd_dict", 
+              "comp_w_zstd", 
+              "comp_w_lz4c", 
+    ]
+    compression = [ "",
+                    f"'sstable_compression': 'ZstdWithDictsCompressor', 'chunk_length_in_kb': 64, 'compression_level': '{opts.level}'",
+                    f"'sstable_compression': 'ZstdCompressor',          'chunk_length_in_kb': 64, 'compression_level': '{opts.level}'",
+                     "'sstable_compression': 'LZ4Compressor',           'chunk_length_in_kb': 64"
+    ]
+    hosts = [h.strip() for h in opts.hosts.split(',') if h.strip()]
+    logger.info(f"Connecting to cluster: {hosts} with user {opts.username}")
+    logger.info(f"Using keyspace: {opts.keyspace}")
+    logger.info(f"Local DC: {opts.dc}")
+    logger.info(f"Using consistency level: {opts.cl}") 
+    logger.info(f"Row count to insert: {opts.row_count}") 
+    try:
+        if hosts[0] == '127.0.0.1':
+            profile = ExecutionProfile(load_balancing_policy=DCAwareRoundRobinPolicy(local_dc=opts.dc), request_timeout=30)
+            cluster = Cluster(hosts,
+                auth_provider=PlainTextAuthProvider(username=opts.username, password=opts.password),
+                execution_profiles={EXEC_PROFILE_DEFAULT: profile},
+                protocol_version=4,
+                connect_timeout=30,
+                control_connection_timeout=30)
+        else:
+            profile = ExecutionProfile(load_balancing_policy=TokenAwarePolicy(DCAwareRoundRobinPolicy(local_dc=opts.dc)))
+            cluster = Cluster(
+                contact_points=hosts,
+                auth_provider=PlainTextAuthProvider(username=opts.username, password=opts.password),
+                execution_profiles={EXEC_PROFILE_DEFAULT: profile},
+                protocol_version=4,
+                connect_timeout=30,
+                control_connection_timeout=30)
+
+        with cluster.connect() as session:
+            logger.info(f"Authentication successful for user: {opts.username}, password: {'*' * len(opts.password)}")
+            if opts.drop:
+                logger.info(f"Dropping keyspace {opts.keyspace} if exists.")
+                session.execute(f"DROP KEYSPACE IF EXISTS {opts.keyspace};")
+            for n in range(len(table)):
+                tbl=table[n]
+                comp=compression[n]
+                logger.info(f"Starting data insertion for table: {tbl} with compression: {comp}")
+                start_time = datetime.datetime.now()
+                insert_data(
+                    session,
+                    opts.keyspace,
+                    tbl,
+                    TABLETS,
+                    comp,
+                    opts.cl,
+                    opts.row_count,
+                    opts.batch_size
+                )
+                elapsed = datetime.datetime.now() - start_time
+                logger.info(f"Total insertion time: {elapsed}")
+    except Exception as e:
+        logger.error(f"Error in main execution: {e}")
+        sys.exit(1)
+    finally:
+        cluster.shutdown()
+        logger.info("Database connection closed.")
 
 if __name__ == "__main__":
-    table = [ "actions_w_none",
-              "actions_w_zstd", 
-              "actions_w_zstd_dict", 
-              "actions_w_lz4c" 
-            ]
-    compression = [ "",
-                    "'sstable_compression': 'ZstdCompressor', 'chunk_length_in_kb': 64",
-                    "'sstable_compression': 'ZstdWithDictsCompressor', 'chunk_length_in_kb': 64",
-                    "'sstable_compression': 'LZ4Compressor', 'chunk_length_in_kb': 64"
-                  ]
-
-    cluster = Cluster(hosts, auth_provider=PlainTextAuthProvider(username, password))
-    session = cluster.connect()
-    numtable= len(table) 
-    if drop_keyspace:
-        session.execute(f"""DROP KEYSPACE if exists {keyspace};""")
-    for i in range(numtable):
-        print("")
-        print(f"## Inserting data into {keyspace}.{table[i]} with compression: {compression[i]}")
-        t = table[i]
-        c = compression[i]
-        insert_data(session, row_count, t, c)
-    session.shutdown()       # or, preferably, cluster.shutdown()
-    now = datetime.datetime.now()
-    print(now.strftime("%Y-%m-%d %H:%M:%S"))
-
+    main()

@@ -40,7 +40,169 @@ spec:
     name: DATACENTER
     racks:
       - name:  rack1
-        members: 3
+        members: 1
+        storage:
+          capacity: CAPACITY
+          storageClassName: scylladb-local-xfs
+        resources:
+          requests:
+            cpu: CPULIMIT
+            memory: MEMORYLIMIT
+          limits:
+            cpu: CPULIMIT
+            memory: MEMORYLIMIT
+        agentResources:      # For ScyllaDB Agent container
+          requests:
+            cpu: "100m"
+            memory: "100Mi"
+          limits:
+            cpu: "100m"
+            memory: "100Mi"
+        placement:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: scylla.scylladb.com/node-type
+                      operator: In
+                      values:
+                        - NODESELECTOR
+          podAntiAffinity: 
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      app: scylla
+                  matchLabelKeys:
+                    - scylla/datacenter
+                  topologyKey: kubernetes.io/hostname
+          # not supported in ScyllaDB Operator 1.17 
+          # podAntiAffinity:
+          #   requiredDuringSchedulingIgnoredDuringExecution:
+          #     - labelSelector:
+          #         matchLabels:
+          #           app: scylla
+          #         matchLabelKeys:
+          #           - scylla/datacenter
+          #       topologyKey: kubernetes.io/hostname
+          tolerations:
+            - effect: NoSchedule
+              key: scylla-operator.scylladb.com/dedicated
+              operator: Equal
+              value: scyllaclusters
+        volumes:
+          # - name: tls-certificates
+          #   secret:
+          #     secretName: scylla-server-certs # Reference the secret containing certificates.
+          # - name: scylladb-serving-ca
+          #   configMap:
+          #     name: scylla-local-serving-ca
+          #     defaultMode: 420
+          - name: scylla-server-certs
+            secret:
+              secretName: scylla-server-certs
+              defaultMode: 420
+        #GCS   - name: gcs-service-account
+        #GCS     secret:
+        #GCS       secretName: gcs-service-account
+        volumeMounts:
+          # - name: tls-certificates
+          #   mountPath: /etc/scylla/certs # Mount path inside the pod.
+          # - name: scylladb-serving-ca
+          #   readOnly: true
+          #   mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+          - name: scylla-server-certs
+            readOnly: true
+            mountPath: /var/run/secrets/scylla-server-certs/
+        #GCS agentVolumeMounts:
+        #GCS   - name: gcs-service-account
+        #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
+        #GCS     subPath: gcs-service-account.json
+        #GCS     readOnly: true
+      - name:  rack2
+        members: 1
+        storage:
+          capacity: CAPACITY
+          storageClassName: scylladb-local-xfs
+        resources:
+          requests:
+            cpu: CPULIMIT
+            memory: MEMORYLIMIT
+          limits:
+            cpu: CPULIMIT
+            memory: MEMORYLIMIT
+        agentResources:      # For ScyllaDB Agent container
+          requests:
+            cpu: "100m"
+            memory: "100Mi"
+          limits:
+            cpu: "100m"
+            memory: "100Mi"
+        placement:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: scylla.scylladb.com/node-type
+                      operator: In
+                      values:
+                        - NODESELECTOR
+          podAntiAffinity: 
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      app: scylla
+                  matchLabelKeys:
+                    - scylla/datacenter
+                  topologyKey: kubernetes.io/hostname
+          # not supported in ScyllaDB Operator 1.17 
+          # podAntiAffinity:
+          #   requiredDuringSchedulingIgnoredDuringExecution:
+          #     - labelSelector:
+          #         matchLabels:
+          #           app: scylla
+          #         matchLabelKeys:
+          #           - scylla/datacenter
+          #       topologyKey: kubernetes.io/hostname
+          tolerations:
+            - effect: NoSchedule
+              key: scylla-operator.scylladb.com/dedicated
+              operator: Equal
+              value: scyllaclusters
+        volumes:
+          # - name: tls-certificates
+          #   secret:
+          #     secretName: scylla-server-certs # Reference the secret containing certificates.
+          # - name: scylladb-serving-ca
+          #   configMap:
+          #     name: scylla-local-serving-ca
+          #     defaultMode: 420
+          - name: scylla-server-certs
+            secret:
+              secretName: scylla-server-certs
+              defaultMode: 420
+        #GCS   - name: gcs-service-account
+        #GCS     secret:
+        #GCS       secretName: gcs-service-account
+        volumeMounts:
+          # - name: tls-certificates
+          #   mountPath: /etc/scylla/certs # Mount path inside the pod.
+          # - name: scylladb-serving-ca
+          #   readOnly: true
+          #   mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+          - name: scylla-server-certs
+            readOnly: true
+            mountPath: /var/run/secrets/scylla-server-certs/
+        #GCS agentVolumeMounts:
+        #GCS   - name: gcs-service-account
+        #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
+        #GCS     subPath: gcs-service-account.json
+        #GCS     readOnly: true
+      - name:  rack3
+        members: 1
         storage:
           capacity: CAPACITY
           storageClassName: scylladb-local-xfs

@@ -33,7 +33,7 @@ def parse_args():
     parser.add_argument('-t', '--table', default="myTable", help='Table name')
     parser.add_argument('-r', '--row_count', type=int, default=100000, help='Number of rows to insert')
     parser.add_argument('-b', '--batch_size', type=int, default=2000, help='Batch size for inserts')
-    parser.add_argument('--cl', default="QUORUM", help="Consistency Level (ONE, TWO, QUORUM, etc.)")
+    parser.add_argument('--cl', default="LOCAL_QUORUM", help="Consistency Level (ONE, TWO, QUORUM, etc.)")
     parser.add_argument('--dc', default='dc1', help='Local datacenter name for ScyllaDB')
 
     return parser.parse_args()

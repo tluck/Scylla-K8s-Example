@@ -14,10 +14,15 @@ imageVersion="3.12-slim"
 #aws ecr batch-delete-image --repository-name "scylla/apps" --image-ids "$(aws ecr list-images --repository-name "scylla/apps" --filter tagStatus=UNTAGGED --query 'imageIds[*]' --output json)"
 
 printf "%s\n" "Building tjlscylladb/apps:${imageVersion}"
+docker login
 docker image rm ${myRegistry}/tjlscylladb/apps:${imageVersion}
 docker build --file Dockerfile.python \
     --platform linux/amd64,linux/arm64 \
     --build-arg VERSION=${imageVersion} \
     -t ${myRegistry}/tjlscylladb/apps:${imageVersion} .
+
+docker tag ${myRegistry}/tjlscylladb/apps:${imageVersion} ${myRegistry}/tjlscylladb/apps:latest
+
 docker push ${myRegistry}/tjlscylladb/apps:${imageVersion}
+docker push ${myRegistry}/tjlscylladb/apps:latest
 

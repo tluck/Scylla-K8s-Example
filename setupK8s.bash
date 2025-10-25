@@ -45,10 +45,10 @@ status=$(helm status cert-manager --namespace cert-manager 2>&1)
 if [[ ${status} == *"not found"* ]]; then
 printf "Installing the cert manager\n"
 helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set crds.enabled=true \
-  --set "nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
-  --set "webhook.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
-  --set "cainjector.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
-  --set "startupapicheck.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}"
+  --set "nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
+  --set "webhook.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
+  --set "cainjector.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
+  --set "startupapicheck.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}"
 fi
 ## fix to create proper certs with a subject.
 issuerNamespace="cert-manager"
@@ -97,21 +97,34 @@ printf "Installing the prometheus-operator via Helm\n"
 # Install Prometheus Operator
 status=$(helm status monitoring --namespace scylla-monitoring 2>&1)
 if [[ ${status} == *"not found"* ]]; then
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagerconfigs.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagers.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_probes.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusagents.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheuses.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_scrapeconfigs.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_thanosrulers.yaml
 helm install monitoring prometheus-community/kube-prometheus-stack \
   --create-namespace \
   --namespace scylla-monitoring \
-  --set "prometheus.prometheusSpec.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
-  --set "alertmanager.alertmanagerSpec.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
-  --set "grafana.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
-  --set "kube-state-metrics.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
-  --set "prometheus-node-exporter.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}" \
-  --set "prometheusOperator.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector1}"
+  --set crds.enabled=false \
+  --set "prometheus.prometheusSpec.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
+  --set "alertmanager.alertmanagerSpec.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
+  --set "grafana.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
+  --set "kube-state-metrics.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
+  --set "prometheus-node-exporter.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
+  --set "prometheusOperator.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}"
 if [ $? -ne 0 ]; then
   printf "%s\n" "* * * Error - Launching Prometheus Operator"
   exit 1
 fi
 fi
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+if [[ ${helmEnabled} == true ]]; then
+printf "Installing the scylla-operator v${operatorTag} via Helm\n"
 status=$(helm status scylla-operator --namespace scylla-operator 2>&1)
 if [[ ${status} == *"not found"* ]]; then
 printf "Installing the scylla-operator v${operatorTag} via Helm\n"
@@ -119,10 +132,18 @@ printf "Installing the scylla-operator v${operatorTag} via Helm\n"
 cat templateOperator.yaml | sed \
   -e "s|REPOSITORY|${operatorRepository}|g" \
   -e "s|IMAGETAG|${operatorTag}|g" \
-  -e "s|NODESELECTOR|${nodeSelector1}|g" \
+  -e "s|NODESELECTOR|${nodeSelector0}|g" \
   > scylla-operator.yaml
 [[ ${operatorTag} == "latest" ]] && repo=scylla-latest || repo=scylla
 helm install scylla-operator ${repo}/scylla-operator --create-namespace --namespace scylla-operator -f scylla-operator.yaml --version ${operatorTag}
+if [ $? -ne 0 ]; then
+  printf "%s\n" "* * * Error - Launching Scylla Operator"
+  exit 1
+fi
+fi
+else
+printf "Installing the scylla-operator v${operatorTag} via kubectl\n"
+kubectl -n=scylla-operator apply --server-side -f=https://raw.githubusercontent.com/scylladb/scylla-operator/v${operatorTag}/deploy/operator.yaml
 if [ $? -ne 0 ]; then
   printf "%s\n" "* * * Error - Launching Scylla Operator"
   exit 1

@@ -22,11 +22,11 @@ kubectl config set-context $(kubectl config current-context) --namespace=${scyll
 context=$(kubectl config current-context)
 
 if [[ ${context} == "docker-desktop" ]]; then
-  cpu=2
+  cpu="2"
   mem="4Gi"
 else
-  cpu=2
-  mem="4Gi"
+  cpu="8"
+  mem="8Gi"
 fi
 
 
@@ -49,7 +49,8 @@ metadata:
 spec:
   serviceAccountName: scylla-member
   containers:
-    - image: "docker.io/tjlscylladb/apps:${imageVersion}"
+    # - image: "docker.io/tjlscylladb/apps:${imageVersion}"
+    - image: "docker.io/tjlscylladb/apps:latest"
       name: ${appName}
       imagePullPolicy: Always # IfNotPresent
       command: ["sleep", "infinity"]
@@ -61,8 +62,8 @@ spec:
           cpu: "${cpu}"
           memory: "${mem}"
         requests:
-          cpu: 0.5
-          memory: 1Gi
+          cpu: "0.5"
+          memory: "1Gi"
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -71,7 +72,12 @@ spec:
           - key: scylla.scylladb.com/node-type
             operator: In
             values:
-            - ${nodeSelector1}
+            - ${nodeSelector2}
+  tolerations:
+    - effect: NoSchedule
+      key:  kubernetes.io/arch
+      operator: Equal
+      value: arm64
   volumes:
     - name: devshm
       emptyDir:

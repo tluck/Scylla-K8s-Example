@@ -144,7 +144,7 @@ locals {
   eks_cluster_security_group_id = module.eks.cluster_security_group_id
   eks_node_security_group_id = module.eks.node_security_group_id
 
-  spark_sg_rules = var.enable_spark ? {
+  spark_sg_rules = var.enable_application ? {
     ingress_allow_sparkmaster = {
       type        = "ingress"
       description = "SparkMaster"
@@ -463,10 +463,10 @@ resource "aws_eks_node_group" "non-dedicated" {
   }
 }
 
-resource "aws_eks_node_group" "spark" {
-  count                      = var.enable_spark ? 1 : 0
+resource "aws_eks_node_group" "application" {
+  count                      = var.enable_application ? 1 : 0
   cluster_name               = module.eks.cluster_name
-  node_group_name            = "spark-nodes"
+  node_group_name            = "application"
   node_role_arn              = aws_iam_role.eks_nodes.arn
   # subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
   subnet_ids                 = [aws_subnet.public_subnet_1.id ] #, aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
@@ -479,7 +479,7 @@ resource "aws_eks_node_group" "spark" {
       id      = aws_launch_template.group_lt_1.id
       version = "$Latest"  # or a specific version number
     }
-  labels                     = { "scylla.scylladb.com/node-type" = "spark" }
+  labels                     = { "scylla.scylladb.com/node-type" = "application" }
   scaling_config {
     desired_size = var.ng_2_size
     min_size     = 0

@@ -1,4 +1,5 @@
 scylla-driver
+scylla-cqlsh
 argparse
 pandas
 faker

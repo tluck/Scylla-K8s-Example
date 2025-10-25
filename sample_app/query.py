@@ -22,7 +22,7 @@ parser.add_argument('-p', '--password', default="cassandra", help='Cassandra pas
 parser.add_argument('-k', '--keyspace', default="mykeyspace", help='Keyspace name')
 parser.add_argument('-t', '--table', default="myTable", help='Table name')
 parser.add_argument('-r', '--row_count', type=int, action="store", dest="row_count", default=100000)
-parser.add_argument('--cl', dest="consistency_level", default="QUORUM", help="Consistency Level (ONE, TWO, QUORUM, ALL, LOCAL_QUORUM, EACH_QUORUM)")
+parser.add_argument('--cl', dest="consistency_level", default="LOCAL_QUORUM", help="Consistency Level (ONE, TWO, QUORUM, ALL, LOCAL_QUORUM, EACH_QUORUM)")
 parser.add_argument('--dc', dest='local_datacenter', default='dc1', help='Local datacenter name for ScyllaDB')
 parser.add_argument('--minutes', type=int, default=60, help='How long to run (minutes)')
 parser.add_argument('--interval', type=float, default=1.0, help='Delay between queries (seconds)')

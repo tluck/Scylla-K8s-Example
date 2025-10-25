@@ -96,7 +96,7 @@ variable "ng_1_size" {
 variable "ng_2_size" {
   description = "number of nodes in node group 2"
   type    = number
-  default = 3
+  default = 1
 }
 
 variable "ebsSize" {
@@ -111,8 +111,8 @@ variable "capacity_type" {
   default = "ON_DEMAND" # or SPOT
 }
 
-variable "enable_spark" {
-  description = "Whether to enable the Spark node group"
+variable "enable_application" {
+  description = "Whether to enable the application/spark node group"
   type        = bool
-  default     = false
+  default     = true
 }
