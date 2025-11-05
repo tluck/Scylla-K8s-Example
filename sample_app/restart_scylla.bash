@@ -11,4 +11,4 @@ sudo systemctl status scylla-server
 sleep 10
 nodetool repair
 nodetool status
-nodetool cluster repair |tee -a repair.out
+nodetool cluster repair | tee -a repair.out

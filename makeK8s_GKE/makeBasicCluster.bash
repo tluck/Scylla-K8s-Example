@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-kubectl config unset current-context
+context=$(kubectl config current-context 2>/dev/null)
+[[ ${context} == *docker-desktop* ]] && kubectl config unset current-context
 [[ -e init.conf ]] && source init.conf
 
 verb=create

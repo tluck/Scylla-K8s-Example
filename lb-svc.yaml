@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    networking.gke.io/load-balancer-type: Internal
+  labels:
+    app: scylla
+    app.kubernetes.io/name: scylla
+    scylla/cluster: scylla
+    scylla-operator.scylladb.com/scylla-service-type: identity
+  name: external-client
+spec:
+  allocateLoadBalancerNodePorts: true
+  externalTrafficPolicy: Local
+  healthCheckNodePort: 31043
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: cql
+    port: 9042
+    protocol: TCP
+    targetPort: 9042
+  - name: cql-tls
+    port: 9142
+    protocol: TCP
+    targetPort: 9142
+  - name: cql-shard-aware
+    port: 19042
+    protocol: TCP
+    targetPort: 19042
+  - name: cql-tls-shard-aware
+    port: 19142
+    protocol: TCP
+    targetPort: 19142
+  selector:
+    app: scylla
+    app.kubernetes.io/name: scylla
+  sessionAffinity: None
+  type: LoadBalancer

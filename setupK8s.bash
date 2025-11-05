@@ -40,10 +40,10 @@ printf "Label nodes for Scylla deployment\n"
 fi
 
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+printf "Installing the cert manager via Helm\n"
 # Install the cert-manager
 status=$(helm status cert-manager --namespace cert-manager 2>&1)
 if [[ ${status} == *"not found"* ]]; then
-printf "Installing the cert manager\n"
 helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set crds.enabled=true \
   --set "nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
   --set "webhook.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
@@ -97,16 +97,16 @@ printf "Installing the prometheus-operator via Helm\n"
 # Install Prometheus Operator
 status=$(helm status monitoring --namespace scylla-monitoring 2>&1)
 if [[ ${status} == *"not found"* ]]; then
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagerconfigs.yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagers.yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_probes.yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusagents.yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheuses.yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_scrapeconfigs.yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_thanosrulers.yaml
+kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagerconfigs.yaml
+kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagers.yaml
+kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
+kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_probes.yaml
+kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusagents.yaml
+kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheuses.yaml
+kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
+kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_scrapeconfigs.yaml
+kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_thanosrulers.yaml
 helm install monitoring prometheus-community/kube-prometheus-stack \
   --create-namespace \
   --namespace scylla-monitoring \
@@ -142,8 +142,14 @@ if [ $? -ne 0 ]; then
 fi
 fi
 else
+  #operatorTag=$(curl -s https://api.github.com/repos/scylladb/scylla-operator/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/v//g')
+if [[ ${operatorTag} == "latest" ]]; then
+  url="https://raw.githubusercontent.com/scylladb/scylla-operator/refs/heads/master/deploy/operator.yaml"
+else
+  url="https://raw.githubusercontent.com/scylladb/scylla-operator/v${operatorTag}/deploy/operator.yaml"
+fi
 printf "Installing the scylla-operator v${operatorTag} via kubectl\n"
-kubectl -n=scylla-operator apply --server-side -f=https://raw.githubusercontent.com/scylladb/scylla-operator/v${operatorTag}/deploy/operator.yaml
+kubectl -n=scylla-operator apply --server-side -f=${url}
 if [ $? -ne 0 ]; then
   printf "%s\n" "* * * Error - Launching Scylla Operator"
   exit 1
@@ -156,16 +162,23 @@ kubectl -n scylla-operator wait deployment/webhook-server  --for=condition=Avail
 
 sleep 5
 # update the scylla-operator config
-printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${dbVersion}\n"
+# printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${dbVersion}\n"
+
+if [[ ${operatorTag} == "latest" || ${operatorTag} == *1.19* ]]; then
+  utilsImage=${dbVersion}
+else
+  utilsImage="2025.1.5"
+fi
+
+# the 2025.2.x and 2025.3.x images have a bug that prevents the scylla-operator from working properly
+printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${utilsImage}\n"
 kubectl apply --server-side --force-conflicts -f=- <<EOF # ScyllaOperatorConfig.yaml
 apiVersion: scylla.scylladb.com/v1alpha1
 kind: ScyllaOperatorConfig
 metadata:
   name: cluster
 spec:
-  # the 2025.2.x images have a bug that prevents the scylla-operator from working properly
-  # scyllaUtilsImage: docker.io/scylladb/scylla:${dbVersion}
-  scyllaUtilsImage: docker.io/scylladb/scylla:2025.1.5
+  scyllaUtilsImage: docker.io/scylladb/scylla:${utilsImage}
 EOF
 
 printf "Using the context ${context}\n"
