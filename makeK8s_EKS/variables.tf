@@ -20,22 +20,22 @@ variable "vpc_id" {
 
 variable "vpc_cidr_block" {
   type = string
-  default = "172.31.0.0/16"
+  default = "172.30.0.0/24"
 }
 
 variable "subnet_cidr_block1" {
   type = string
-  default = "172.31.1.0/24"
+  default = "172.30.0.0/26"
 }
 
 variable "subnet_cidr_block2" {
   type = string
-  default = "172.31.2.0/24"
+  default = "172.30.0.64/26"
 }
 
 variable "subnet_cidr_block3" {
   type = string
-  default = "172.31.3.0/24"
+  default = "172.30.0.128/26"
 }
 
 variable "ssh_public_key_file" {
@@ -113,6 +113,12 @@ variable "capacity_type" {
 
 variable "enable_application" {
   description = "Whether to enable the application/spark node group"
+  type        = bool
+  default     = true
+}
+
+variable "singlezone" {
+  description = "Whether to use a single availability zone"
   type        = bool
   default     = true
 }

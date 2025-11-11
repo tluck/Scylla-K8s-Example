@@ -4,13 +4,27 @@ metadata:
   name: CLUSTERNAME
 spec:
   type: Platform
+# [endpointsSelector]
   endpointsSelector:
     matchLabels:
-      app.kubernetes.io/name: CLUSTERNAME
+      app.kubernetes.io/name: scylla
       scylla-operator.scylladb.com/scylla-service-type: member
-      scylla/cluster: CLUSTERNAME
+      scylla/cluster: CLUSTERNAME # Replace with your ScyllaCluster name.
+# [/endpointsSelector]
+# [prometheusMode]
   components:
     prometheus:
+      mode: External
+# [/prometheusMode]
+    grafana:
+# [grafanaDatasources]
+      datasources:
+        - name: prometheus
+          type: Prometheus
+          url: http://CLUSTERNAME-prometheus.NAMESPACE.svc.cluster.local:9090
+          prometheusOptions: {}
+# [/grafanaDatasources]
+      # set to "Internal" to deploy Prometheus in the cluster
       resources:
         requests:
           cpu: "500m"
@@ -18,13 +32,6 @@ spec:
         limits:
           cpu: "2"
           memory: "2Gi"
-      storage:
-        volumeClaimTemplate:
-          spec:
-            storageClassName: "STORAGECLASS" # standard or gp2 vs xfs
-            resources:
-              requests:
-                storage: MONITORCAPACITY
       placement:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -34,17 +41,3 @@ spec:
                 operator: In
                 values:
                 - NODESELECTOR
-        tolerations:
-        - effect: NoSchedule
-          key: scylla-operator.scylladb.com/dedicated
-          operator: Equal
-          value: scyllaclusters
-    grafana:
-      exposeOptions: {}
-        # webInterface:
-        #   ingress:
-        #     ingressClassName: haproxy
-        #     dnsDomains:
-        #     - scylla-grafana.test.svc.cluster.local
-        #     annotations:
-        #       haproxy-ingress.github.io/ssl-passthrough: "true"

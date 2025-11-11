@@ -4,7 +4,7 @@ This repository holds examples of deploying ScyllaDB with the Kubernetes [Scylla
 
 ## End-to-End Deployment in K8s
 
-This example will deploy a small-scale 6-node cluster in a single "datacenter" (cloud region). Two node groups are used - one is dedicated for ScyllaDB and a second node group is deployed for all the supporting resources. Optionally, a second datacenter can be deployed. 
+This example will deploy a small-scale 6-node cluster in a single "datacenter" (cloud region). Two node groups are used - one is dedicated for ScyllaDB and a second node group is deployed for all the supporting resources. Optionally, a second datacenter can be deployed.
 
 ### Prerequisites
 
@@ -56,12 +56,17 @@ For a multi-dc cluster, change the `init.conf` dataCenterName to dc2 and rerun t
 
 To create a backup, run `create_backup.bash`, or on the mananger pod run for cloud object storege backups:
 
-- Run the following to update the configuuration with authention:
-`sctool cluster update --username cassandra --password cassandra -c scylla-dc1/scylla`
+- Run the following to update the configuuration with authentions
+    Note: assuming the cluster is in namespace region1 and named scylla
+          and there is a bucket scylla-backups-uswest2 (in that region configured)
+`sctool cluster update --username cassandra --password cassandra -c region1/scylla`
 - For AWS/Minio object storage (s3) run:
-`sctool backup -c scylla-dc1/scylla -L s3:scylla-backups`
+`sctool backup -c region1/scylla -L s3:scylla-backups-uswest2`
 - For GCP object storage (GCS) run:
-`sctool backup -c scylla-dc1/scylla -L gcs:scylla-backups-gke`
+`sctool backup -c region1/scylla -L gcs:scylla-backups-gke`
+
+- Run this to create an ongoing job:
+`sctool backup --name="hourly_backup" --cluster="region1/scylla" --location='s3:scylla-backups-uswest2' --cron="@hourly" --retention=24`
 
 ### Sample App
 

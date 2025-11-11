@@ -29,8 +29,8 @@ def parse_args():
     parser.add_argument('-u', '--username', default="cassandra", help='Cassandra username')
     parser.add_argument('-p', '--password', default="cassandra", help='Cassandra password')
     parser.add_argument('-k', '--keyspace', default="mykeyspace", help='Keyspace name')
-    parser.add_argument('-d', '--drop', action="store_true", help='Drop keyspace if exists')
     parser.add_argument('-t', '--table', default="myTable", help='Table name')
+    parser.add_argument('-d', '--drop', action="store_true", help='Drop table if exists')
     parser.add_argument('-r', '--row_count', type=int, default=100000, help='Number of rows to insert')
     parser.add_argument('-b', '--batch_size', type=int, default=2000, help='Batch size for inserts')
     parser.add_argument('--cl', default="LOCAL_QUORUM", help="Consistency Level (ONE, TWO, QUORUM, etc.)")
@@ -141,8 +141,8 @@ def main():
         with cluster.connect() as session:
             logger.info(f"Authentication successful for user: {opts.username}, password: {'*' * len(opts.password)}")
             if opts.drop:
-                logger.info(f"Dropping keyspace {opts.keyspace} if exists.")
-                session.execute(f"DROP KEYSPACE IF EXISTS {opts.keyspace};")
+                logger.info(f"Dropping table {opts.keyspace}.{opts.table} if exists.")
+                session.execute(f"DROP TABLE IF EXISTS {opts.keyspace}.{opts.table};")
             start_time = datetime.datetime.now()
             insert_data(
                 session,

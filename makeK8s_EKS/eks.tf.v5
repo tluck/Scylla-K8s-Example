@@ -68,7 +68,7 @@ resource "aws_key_pair" "key_pair" {
 # Fetch the default VPC
 resource "aws_vpc" "existing_vpc" {
   # assign_generated_ipv6_cidr_block = false
-  cidr_block = "172.31.0.0/16"
+  cidr_block = "172.30.0.0/24"
 }
 
 # EKS Module using the default VPC and its subnets
@@ -133,7 +133,7 @@ module "eks" {
       from_port   = 443
       to_port     = 443
       protocol    = "tcp"
-      cidr_blocks = ["172.31.0.0/16"]
+      cidr_blocks = ["172.30.0.0/24"]
     }
 
     ingress_allow_webhook = {

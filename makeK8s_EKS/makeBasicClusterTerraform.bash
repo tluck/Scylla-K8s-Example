@@ -3,6 +3,7 @@
 currentContext=$(kubectl config current-context)
 kubectl config unset current-context
 [[ -e init.conf ]] && source init.conf
+source tf.conf
 [[ -n ${currentContext} ]] && kubectl config set current-context ${currentContext}
 
 if [[ $1 == "-d" ]]; then
@@ -53,6 +54,7 @@ else
         -var="ebsSize=${ebsSize}" \
         -var="prefix=${prefix}" \
         -var="vpc_id=${vpcId}" \
+        -var="singlezone=${singleZone}" \
         -var="ssh_public_key_file=${sshKey}"
 
     if [[ ${verb} != *"apply"* ]]; then

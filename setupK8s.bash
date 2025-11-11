@@ -8,17 +8,19 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
   kubectl delete $(kubectl get nodeconfig -o name)
   kubectl delete ns local-csi-driver
   kubectl delete ns scylla-operator-node-tuning
-  helm uninstall monitoring       --namespace scylla-monitoring
+  helm uninstall monitoring       --namespace ${scyllaMonitoringNamespace}
   helm uninstall cert-manager     --namespace cert-manager
   helm uninstall scylla-operator  --namespace scylla-operator
 
   [[ ${minioEnabled} == true ]] && ./deployMinio.bash ${1}
 
   if [[ ${1} == '-x' ]]; then
-    kubectl delete ns scylla-monitoring
+    kubectl delete ns ${scyllaMonitoringNamespace}
     kubectl delete ns cert-manager
     kubectl delete ns scylla-operator
     kubectl delete $( kubectl get crds -o name | grep scylla ) 
+    kubectl delete $( kubectl get crds -o name | grep cert-manager ) 
+    kubectl delete $( kubectl get crds -o name | grep coreos ) 
   fi
 else
 
@@ -95,22 +97,22 @@ printf "... Done.\n"
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Installing the prometheus-operator via Helm\n"
 # Install Prometheus Operator
-status=$(helm status monitoring --namespace scylla-monitoring 2>&1)
+status=$(helm status monitoring --namespace ${scyllaMonitoringNamespace} 2>&1)
 if [[ ${status} == *"not found"* ]]; then
-kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagerconfigs.yaml
-kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagers.yaml
-kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
-kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_probes.yaml
-kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusagents.yaml
-kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheuses.yaml
-kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
-kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_scrapeconfigs.yaml
-kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
-kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_thanosrulers.yaml
+# kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagerconfigs.yaml
+# kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagers.yaml
+# kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
+# kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_probes.yaml
+# kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusagents.yaml
+# kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheuses.yaml
+# kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml
+# kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_scrapeconfigs.yaml
+# kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+# kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_thanosrulers.yaml
 helm install monitoring prometheus-community/kube-prometheus-stack \
   --create-namespace \
-  --namespace scylla-monitoring \
-  --set crds.enabled=false \
+  --namespace ${scyllaMonitoringNamespace} \
+  --set crds.enabled=true \
   --set "prometheus.prometheusSpec.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
   --set "alertmanager.alertmanagerSpec.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
   --set "grafana.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
@@ -166,8 +168,9 @@ sleep 5
 
 if [[ ${operatorTag} == "latest" || ${operatorTag} == *1.19* ]]; then
   utilsImage=${dbVersion}
+  [[ ${context} == *eks* ]] && utilsImage="2025.1.9" # because of the EKS 1.19 image bug
 else
-  utilsImage="2025.1.5"
+  utilsImage="2025.1.9"
 fi
 
 # the 2025.2.x and 2025.3.x images have a bug that prevents the scylla-operator from working properly
@@ -204,7 +207,12 @@ printf "\n%s\n" '---------------------------------------------------------------
 printf "Applying the scylla nodeconfig\n"
 # fix the nodeconfig for the local-csi-driver based on the context (cloud provider k8s type)
 [[ ${context} == *eks* ]] && eks="" || eks="#AWS "
-cat local-csi-driver/nodeconfigTemplate.yaml | sed -e "s|#AWS |${eks}|g" > local-csi-driver/nodeconfig.yaml
+
+cat local-csi-driver/nodeconfigTemplate.yaml | sed \
+  -e "s|#AWS |${eks}|g" \
+  -e "s|#v19 |${v19}|g" \
+  -e "s|#v18 |${v18}|g" \
+  > local-csi-driver/nodeconfig.yaml
 kubectl -n scylla-operator apply --server-side -f local-csi-driver/nodeconfig.yaml
 # Wait for NodeConfig to apply changes to the Kubernetes nodes.
 kubectl wait --for='condition=Reconciled' --timeout=10m nodeconfigs.scylla.scylladb.com/scylladb-nodepool-1
