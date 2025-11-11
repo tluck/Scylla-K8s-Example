@@ -47,7 +47,7 @@ metadata:
   labels:
     app.kubernetes.io/name: ${appName}
 spec:
-  serviceAccountName: scylla-member
+  serviceAccountName: ${clusterName}-member
   containers:
     # - image: "docker.io/tjlscylladb/apps:${imageVersion}"
     - image: "docker.io/tjlscylladb/apps:latest"

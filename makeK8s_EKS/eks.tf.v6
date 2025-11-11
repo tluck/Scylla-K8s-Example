@@ -416,7 +416,7 @@ resource "aws_eks_node_group" "dedicated" {
   node_group_name            = "dedicated"
   node_role_arn              = aws_iam_role.eks_nodes.arn
   # subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
-  subnet_ids                 = [aws_subnet.public_subnet_1.id ] #, aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
+  subnet_ids                 = var.singlezone ? [aws_subnet.public_subnet_1.id] : [aws_subnet.public_subnet_1.id , aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
   instance_types             = [local.instance_type0]
   capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT" 
   version                    = var.eks_nodegroup_version
@@ -445,7 +445,7 @@ resource "aws_eks_node_group" "non-dedicated" {
   node_group_name            = "non-dedicated"
   node_role_arn              = aws_iam_role.eks_nodes.arn
   # subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
-  subnet_ids                 = [aws_subnet.public_subnet_1.id ] #, aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
+  subnet_ids                 = var.singlezone ? [aws_subnet.public_subnet_1.id] : [aws_subnet.public_subnet_1.id , aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
   instance_types             = [local.instance_type1]
   capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT" 
   version                    = var.eks_nodegroup_version
@@ -469,7 +469,7 @@ resource "aws_eks_node_group" "application" {
   node_group_name            = "application"
   node_role_arn              = aws_iam_role.eks_nodes.arn
   # subnet_ids                 = [data.aws_subnets.existing_subnets.ids[0]]
-  subnet_ids                 = [aws_subnet.public_subnet_1.id ] #, aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
+  subnet_ids                 = var.singlezone ? [aws_subnet.public_subnet_1.id] : [aws_subnet.public_subnet_1.id , aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
   instance_types             = [local.instance_type1]
   capacity_type              = var.capacity_type # "ON_DEMAND" or "SPOT" 
   version                    = var.eks_nodegroup_version
