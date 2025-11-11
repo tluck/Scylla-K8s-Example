@@ -1,0 +1,60 @@
+apiVersion: scylla.scylladb.com/v1alpha1
+kind: ScyllaDBMonitoring
+metadata:
+  name: CLUSTERNAME
+spec:
+  type: Platform
+  endpointsSelector:
+    matchLabels:
+      app.kubernetes.io/name: CLUSTERNAME
+      scylla-operator.scylladb.com/scylla-service-type: member
+      scylla/cluster: CLUSTERNAME
+  components:
+    prometheus:
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+        limits:
+          cpu: "2"
+          memory: "2Gi"
+      storage:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: "STORAGECLASS" # standard or gp2 vs xfs
+            resources:
+              requests:
+                storage: MONITORCAPACITY
+      placement:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: scylla.scylladb.com/node-type
+                operator: In
+                values:
+                - NODESELECTOR
+        podAntiAffinity: 
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: scylla
+                matchLabelKeys:
+                  - scylla/datacenter
+                topologyKey: kubernetes.io/hostname
+        tolerations:
+        - effect: NoSchedule
+          key: scylla-operator.scylladb.com/dedicated
+          operator: Equal
+          value: scyllaclusters
+    grafana:
+      exposeOptions: {}
+        # webInterface:
+        #   ingress:
+        #     ingressClassName: haproxy
+        #     dnsDomains:
+        #     - scylla-grafana.test.svc.cluster.local
+        #     annotations:
+        #       haproxy-ingress.github.io/ssl-passthrough: "true"

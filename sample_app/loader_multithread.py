@@ -39,6 +39,7 @@ def parse_args():
     parser.add_argument('--dc', default='dc1', help='Local datacenter name for ScyllaDB')
     parser.add_argument('--workers', type=int, default=0, help='Number of worker processes (0 = cpu_count())')
     parser.add_argument('--shard_aware', action="store_true", help='If set, you should pass host:19042 to connect to shard-aware port')
+    parser.add_argument('-o', '--offset', type=int, default=0, help='Offset for ID generation to avoid collisions across runs')
     return parser.parse_args()
 
 def str_time_prop(start, end, fmt, prop):
@@ -107,7 +108,7 @@ def _build_cluster_and_session(hosts, username, password, dc, local_loopback, sh
         cluster = Cluster(
             hosts,
             auth_provider=PlainTextAuthProvider(username=username, password=password),
-            execuion_profiles={EXEC_PROFILE_DEFAULT: profile},
+            execution_profiles={EXEC_PROFILE_DEFAULT: profile},
             port=port,
             protocol_version=4,
             connect_timeout=30,
@@ -140,7 +141,8 @@ def _worker_insert_range(
     end_id,
     batch_size,
     local_loopback,
-    shard_aware
+    shard_aware,
+    offset
 ):
     # Per-process RNG
     _init_worker_rng(worker_index)
@@ -156,7 +158,7 @@ def _worker_insert_range(
         total = 0
         total_failed = 0
         for (s_id, e_id) in chunked_ids(start_id, end_id, batch_size):
-            batch = [generate_row(fake, i) for i in range(s_id, e_id + 1)]
+            batch = [generate_row(fake, i+offset) for i in range(s_id, e_id + 1)]
             results = execute_concurrent_with_args(session, prepared, batch, concurrency=100)
             failed = sum(1 for (success, _) in results if not success)
             total += len(batch)
@@ -188,7 +190,8 @@ def insert_data_parallel(
     row_count,
     batch_size,
     workers,
-    shard_aware
+    shard_aware,
+    offset
 ):
     # One control session in parent to create schema (safe and simple)
     local_loopback = (hosts and hosts[0] == '127.0.0.1')
@@ -217,7 +220,7 @@ def insert_data_parallel(
         jobs = []
         for w in range(procs):
             start_id = w * span + 1
-            end_id = min((w + 1) * span, row_count)
+            end_id = min((w + 1) * span, row_count) 
             if start_id > end_id:
                 continue
             jobs.append(pool.apply_async(
@@ -235,7 +238,8 @@ def insert_data_parallel(
                     end_id=end_id,
                     batch_size=batch_size,
                     local_loopback=local_loopback,
-                    shard_aware=shard_aware
+                    shard_aware=shard_aware,
+                    offset=offset
                 )
             ))
         pool.close()
@@ -252,6 +256,7 @@ def insert_data_parallel(
     logger.info(f"All workers done: inserted={total_rows}, failures={total_failed}")
 
 def main():
+    global offset
     opts = parse_args()
     hosts = [h.strip() for h in opts.hosts.split(',') if h.strip()]
 
@@ -261,6 +266,7 @@ def main():
     logger.info(f"Using consistency level: {opts.cl}")
     logger.info(f"Row count to insert: {opts.row_count}")
     logger.info(f"Workers: {opts.workers or cpu_count()}")
+    offset = opts.offset
 
     try:
         if opts.drop:
@@ -293,7 +299,8 @@ def main():
             row_count=opts.row_count,
             batch_size=opts.batch_size,
             workers=opts.workers,
-            shard_aware=opts.shard_aware
+            shard_aware=opts.shard_aware,
+            offset=offset
         )
         elapsed = datetime.datetime.now() - start_time
         logger.info(f"Total insertion time: {elapsed}")
@@ -303,4 +310,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
