@@ -107,7 +107,7 @@ def _build_cluster_and_session(hosts, username, password, dc, local_loopback, sh
         cluster = Cluster(
             hosts,
             auth_provider=PlainTextAuthProvider(username=username, password=password),
-            execuion_profiles={EXEC_PROFILE_DEFAULT: profile},
+            execution_profiles={EXEC_PROFILE_DEFAULT: profile},
             port=port,
             protocol_version=4,
             connect_timeout=30,

@@ -3,9 +3,9 @@ kind: ScyllaCluster
 metadata:
   name: CLUSTERNAME
 spec:
-  agentVersion: AGENTVERSION # 3.4.2
+  agentVersion: AGENTVERSION # 3.7.0
   repository: docker.io/scylladb/scylla
-  version: DBVERSION # 2024.2.7
+  version: DBVERSION # 2025.1.5
   developerMode: DEVMODE
   scyllaArgs: "--smp=CPULIMIT" # "--poll-mode"
   #ALT alternator:
@@ -21,16 +21,16 @@ spec:
   exposeOptions:
     broadcastOptions:
       clients:
-        type: BROADCASTTYPE
+        type: BROADCASTCLIENTSTYPE
       nodes:
-        type: BROADCASTTYPE
+        type: BROADCASTNODESTYPE
     nodeService:
       type: NODESERVICETYPE
   cpuset: true # deprecated
-  sysctls:
-    - fs.aio-max-nr=30000000
-    - fs.nr_open=1073741816
-    - fs.file-max=9223372036854775807
+  #v18 sysctls: # deprecated
+  #v18   - fs.aio-max-nr=30000000
+  #v18   - fs.nr_open=1073741816
+  #v18   - fs.file-max=9223372036854775807
   #MDC externalSeeds:
   #MDC  - EXTERNAL-SEED-1
   #MDC  - EXTERNAL-SEED-2
@@ -39,7 +39,7 @@ spec:
   datacenter:
     name: DATACENTER
     racks:
-      - name:  rack1
+      - name: rack1
         members: 1
         storage:
           capacity: CAPACITY
@@ -67,60 +67,50 @@ spec:
                       operator: In
                       values:
                         - NODESELECTOR
-          podAntiAffinity: 
-            preferredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  labelSelector:
-                    matchLabels:
-                      app: scylla
-                  matchLabelKeys:
-                    - scylla/datacenter
-                  topologyKey: kubernetes.io/hostname
-          # not supported in ScyllaDB Operator 1.17 
-          # podAntiAffinity:
-          #   requiredDuringSchedulingIgnoredDuringExecution:
-          #     - labelSelector:
-          #         matchLabels:
-          #           app: scylla
-          #         matchLabelKeys:
-          #           - scylla/datacenter
-          #       topologyKey: kubernetes.io/hostname
+                    #CLOUD - key: topology.kubernetes.io/zone
+                    #CLOUD   operator: In
+                    #CLOUD   values:
+                    #CLOUD   - ZONE1
+          #v18 podAntiAffinity: 
+          #v18   preferredDuringSchedulingIgnoredDuringExecution:
+          #v18     - weight: 100
+          #v18       podAffinityTerm:
+          #v18         labelSelector:
+          #v18           matchLabels:
+          #v18             app: scylla
+          #v18         matchLabelKeys:
+          #v18           - scylla/datacenter
+          #v18         topologyKey: kubernetes.io/hostname
           tolerations:
             - effect: NoSchedule
               key: scylla-operator.scylladb.com/dedicated
               operator: Equal
               value: scyllaclusters
-        volumes:
-          # - name: tls-certificates
-          #   secret:
-          #     secretName: scylla-server-certs # Reference the secret containing certificates.
-          # - name: scylladb-serving-ca
-          #   configMap:
-          #     name: scylla-local-serving-ca
-          #     defaultMode: 420
-          - name: scylla-server-certs
-            secret:
-              secretName: scylla-server-certs
-              defaultMode: 420
+        #CTorG volumes:
+        #CERTS   - name: CLUSTERNAME-server-certs
+        #CERTS     secret:
+        #CERTS       secretName: CLUSTERNAME-server-certs
+        #CERTS       defaultMode: 420
+        #CERTS   - name: scylladb-serving-ca
+        #CERTS     configMap:
+        #CERTS       name: CLUSTERNAME-local-serving-ca
+        #CERTS       defaultMode: 420
         #GCS   - name: gcs-service-account
         #GCS     secret:
         #GCS       secretName: gcs-service-account
-        volumeMounts:
-          # - name: tls-certificates
-          #   mountPath: /etc/scylla/certs # Mount path inside the pod.
-          # - name: scylladb-serving-ca
-          #   readOnly: true
-          #   mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
-          - name: scylla-server-certs
-            readOnly: true
-            mountPath: /var/run/secrets/scylla-server-certs/
+        #CTorG volumeMounts:
+        #CERTS   - name: CLUSTERNAME-server-certs
+        #CERTS     readOnly: true
+        #CERTS     mountPath: /var/run/secrets/scylla-server-certs/
+        #CERTS   - name: scylladb-serving-ca
+        #CERTS     readOnly: true
+        #CERTS     mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
         #GCS agentVolumeMounts:
         #GCS   - name: gcs-service-account
         #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
         #GCS     subPath: gcs-service-account.json
         #GCS     readOnly: true
-      - name:  rack2
+      - name: rack2
         members: 1
         storage:
           capacity: CAPACITY
@@ -148,60 +138,50 @@ spec:
                       operator: In
                       values:
                         - NODESELECTOR
-          podAntiAffinity: 
-            preferredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  labelSelector:
-                    matchLabels:
-                      app: scylla
-                  matchLabelKeys:
-                    - scylla/datacenter
-                  topologyKey: kubernetes.io/hostname
-          # not supported in ScyllaDB Operator 1.17 
-          # podAntiAffinity:
-          #   requiredDuringSchedulingIgnoredDuringExecution:
-          #     - labelSelector:
-          #         matchLabels:
-          #           app: scylla
-          #         matchLabelKeys:
-          #           - scylla/datacenter
-          #       topologyKey: kubernetes.io/hostname
+                    #CLOUD - key: topology.kubernetes.io/zone
+                    #CLOUD   operator: In
+                    #CLOUD   values:
+                    #CLOUD   - ZONE2
+          #v18 podAntiAffinity: 
+          #v18   preferredDuringSchedulingIgnoredDuringExecution:
+          #v18     - weight: 100
+          #v18       podAffinityTerm:
+          #v18         labelSelector:
+          #v18           matchLabels:
+          #v18             app: scylla
+          #v18         matchLabelKeys:
+          #v18           - scylla/datacenter
+          #v18         topologyKey: kubernetes.io/hostname
           tolerations:
             - effect: NoSchedule
               key: scylla-operator.scylladb.com/dedicated
               operator: Equal
               value: scyllaclusters
-        volumes:
-          # - name: tls-certificates
-          #   secret:
-          #     secretName: scylla-server-certs # Reference the secret containing certificates.
-          # - name: scylladb-serving-ca
-          #   configMap:
-          #     name: scylla-local-serving-ca
-          #     defaultMode: 420
-          - name: scylla-server-certs
-            secret:
-              secretName: scylla-server-certs
-              defaultMode: 420
+        #CTorG volumes:
+        #CERTS   - name: CLUSTERNAME-server-certs
+        #CERTS     secret:
+        #CERTS       secretName: CLUSTERNAME-server-certs
+        #CERTS       defaultMode: 420
+        #CERTS   - name: scylladb-serving-ca
+        #CERTS     configMap:
+        #CERTS       name: CLUSTERNAME-local-serving-ca
+        #CERTS       defaultMode: 420
         #GCS   - name: gcs-service-account
         #GCS     secret:
         #GCS       secretName: gcs-service-account
-        volumeMounts:
-          # - name: tls-certificates
-          #   mountPath: /etc/scylla/certs # Mount path inside the pod.
-          # - name: scylladb-serving-ca
-          #   readOnly: true
-          #   mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
-          - name: scylla-server-certs
-            readOnly: true
-            mountPath: /var/run/secrets/scylla-server-certs/
+        #CTorG volumeMounts:
+        #CERTS   - name: CLUSTERNAME-server-certs
+        #CERTS     readOnly: true
+        #CERTS     mountPath: /var/run/secrets/scylla-server-certs/
+        #CERTS   - name: scylladb-serving-ca
+        #CERTS     readOnly: true
+        #CERTS     mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
         #GCS agentVolumeMounts:
         #GCS   - name: gcs-service-account
         #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
         #GCS     subPath: gcs-service-account.json
         #GCS     readOnly: true
-      - name:  rack3
+      - name: rack3
         members: 1
         storage:
           capacity: CAPACITY
@@ -229,54 +209,44 @@ spec:
                       operator: In
                       values:
                         - NODESELECTOR
-          podAntiAffinity: 
-            preferredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  labelSelector:
-                    matchLabels:
-                      app: scylla
-                  matchLabelKeys:
-                    - scylla/datacenter
-                  topologyKey: kubernetes.io/hostname
-          # not supported in ScyllaDB Operator 1.17 
-          # podAntiAffinity:
-          #   requiredDuringSchedulingIgnoredDuringExecution:
-          #     - labelSelector:
-          #         matchLabels:
-          #           app: scylla
-          #         matchLabelKeys:
-          #           - scylla/datacenter
-          #       topologyKey: kubernetes.io/hostname
+                    #CLOUD - key: topology.kubernetes.io/zone
+                    #CLOUD   operator: In
+                    #CLOUD   values:
+                    #CLOUD   - ZONE3
+          #v18 podAntiAffinity: 
+          #v18   preferredDuringSchedulingIgnoredDuringExecution:
+          #v18     - weight: 100
+          #v18       podAffinityTerm:
+          #v18         labelSelector:
+          #v18           matchLabels:
+          #v18             app: scylla
+          #v18         matchLabelKeys:
+          #v18           - scylla/datacenter
+          #v18         topologyKey: kubernetes.io/hostname
           tolerations:
             - effect: NoSchedule
               key: scylla-operator.scylladb.com/dedicated
               operator: Equal
               value: scyllaclusters
-        volumes:
-          # - name: tls-certificates
-          #   secret:
-          #     secretName: scylla-server-certs # Reference the secret containing certificates.
-          # - name: scylladb-serving-ca
-          #   configMap:
-          #     name: scylla-local-serving-ca
-          #     defaultMode: 420
-          - name: scylla-server-certs
-            secret:
-              secretName: scylla-server-certs
-              defaultMode: 420
+        #CTorG volumes:
+        #CERTS   - name: CLUSTERNAME-server-certs
+        #CERTS     secret:
+        #CERTS       secretName: CLUSTERNAME-server-certs
+        #CERTS       defaultMode: 420
+        #CERTS   - name: scylladb-serving-ca
+        #CERTS     configMap:
+        #CERTS       name: CLUSTERNAME-local-serving-ca
+        #CERTS       defaultMode: 420
         #GCS   - name: gcs-service-account
         #GCS     secret:
         #GCS       secretName: gcs-service-account
-        volumeMounts:
-          # - name: tls-certificates
-          #   mountPath: /etc/scylla/certs # Mount path inside the pod.
-          # - name: scylladb-serving-ca
-          #   readOnly: true
-          #   mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
-          - name: scylla-server-certs
-            readOnly: true
-            mountPath: /var/run/secrets/scylla-server-certs/
+        #CTorG volumeMounts:
+        #CERTS   - name: CLUSTERNAME-server-certs
+        #CERTS     readOnly: true
+        #CERTS     mountPath: /var/run/secrets/scylla-server-certs/
+        #CERTS   - name: scylladb-serving-ca
+        #CERTS     readOnly: true
+        #CERTS     mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
         #GCS agentVolumeMounts:
         #GCS   - name: gcs-service-account
         #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
