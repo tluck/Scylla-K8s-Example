@@ -87,6 +87,10 @@ spec:
               operator: Equal
               value: scyllaclusters
         #CTorG volumes:
+        #CERTS   - name: CLUSTERNAME-client-certs
+        #CERTS     secret:
+        #CERTS       secretName: CLUSTERNAME-client-certs
+        #CERTS       defaultMode: 420
         #CERTS   - name: CLUSTERNAME-server-certs
         #CERTS     secret:
         #CERTS       secretName: CLUSTERNAME-server-certs
@@ -99,6 +103,9 @@ spec:
         #GCS     secret:
         #GCS       secretName: gcs-service-account
         #CTorG volumeMounts:
+        #CERTS   - name: CLUSTERNAME-client-certs
+        #CERTS     readOnly: true
+        #CERTS     mountPath: /var/run/secrets/scylla-client-certs/
         #CERTS   - name: CLUSTERNAME-server-certs
         #CERTS     readOnly: true
         #CERTS     mountPath: /var/run/secrets/scylla-server-certs/
@@ -158,6 +165,10 @@ spec:
               operator: Equal
               value: scyllaclusters
         #CTorG volumes:
+        #CERTS   - name: CLUSTERNAME-client-certs
+        #CERTS     secret:
+        #CERTS       secretName: CLUSTERNAME-client-certs
+        #CERTS       defaultMode: 420
         #CERTS   - name: CLUSTERNAME-server-certs
         #CERTS     secret:
         #CERTS       secretName: CLUSTERNAME-server-certs
@@ -170,6 +181,9 @@ spec:
         #GCS     secret:
         #GCS       secretName: gcs-service-account
         #CTorG volumeMounts:
+        #CERTS   - name: CLUSTERNAME-client-certs
+        #CERTS     readOnly: true
+        #CERTS     mountPath: /var/run/secrets/scylla-client-certs/
         #CERTS   - name: CLUSTERNAME-server-certs
         #CERTS     readOnly: true
         #CERTS     mountPath: /var/run/secrets/scylla-server-certs/
@@ -229,6 +243,10 @@ spec:
               operator: Equal
               value: scyllaclusters
         #CTorG volumes:
+        #CERTS   - name: CLUSTERNAME-client-certs
+        #CERTS     secret:
+        #CERTS       secretName: CLUSTERNAME-client-certs
+        #CERTS       defaultMode: 420
         #CERTS   - name: CLUSTERNAME-server-certs
         #CERTS     secret:
         #CERTS       secretName: CLUSTERNAME-server-certs
@@ -241,6 +259,9 @@ spec:
         #GCS     secret:
         #GCS       secretName: gcs-service-account
         #CTorG volumeMounts:
+        #CERTS   - name: CLUSTERNAME-client-certs
+        #CERTS     readOnly: true
+        #CERTS     mountPath: /var/run/secrets/scylla-client-certs/
         #CERTS   - name: CLUSTERNAME-server-certs
         #CERTS     readOnly: true
         #CERTS     mountPath: /var/run/secrets/scylla-server-certs/
