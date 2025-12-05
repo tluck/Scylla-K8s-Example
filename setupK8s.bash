@@ -4,7 +4,7 @@ date
 [[ -e init.conf ]] && source init.conf
 
 if [[ ${1} == '-d' || ${1} == '-x' ]]; then
-  printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+  printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
   kubectl delete $(kubectl get nodeconfig -o name)
   kubectl delete ns local-csi-driver
   kubectl delete ns scylla-operator-node-tuning
@@ -25,7 +25,7 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
 else
 
 printf "Using context: ${context}\n"
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Import/Update Helm Repos\n"
 # helm repo remove scylla
 helm repo add scylla           	    https://scylla-operator-charts.storage.googleapis.com/stable
@@ -35,13 +35,13 @@ helm repo add minio-operator      	https://operator.min.io
 helm repo update
 
 if [[ ${context} == *docker* ]]; then
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Label nodes for Scylla deployment\n"
 # label nodes for Scylla - otherwise labels are set during provisioning
 ./labelNodes.bash
 fi
 
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Installing the cert manager via Helm\n"
 # Install the cert-manager
 status=$(helm status cert-manager --namespace cert-manager 2>&1)
@@ -52,49 +52,10 @@ helm install cert-manager jetstack/cert-manager --namespace cert-manager --creat
   --set "cainjector.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
   --set "startupapicheck.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}"
 fi
-## fix to create proper certs with a subject.
-issuerNamespace="cert-manager"
-issuerName="myclusterissuer"
-printf "%s\n" "Waiting for the cert-manager ..."
-# Create an issuer from the CA secret
-code=1
-n=0
-while [ $code -eq 1 ]
-do
-sleep 20
-if [[ ${dataCenterName} == 'dc1' ]]; then
-[[ ! -e tls ]] && mkdir tls
-kubectl -n cert-manager get secret cert-manager-webhook-ca -o jsonpath="{.data['ca\.crt']}"  | base64 -d > tls/ca.crt
-kubectl -n cert-manager get secret cert-manager-webhook-ca -o jsonpath="{.data['tls\.crt']}" | base64 -d > tls/tls.crt
-kubectl -n cert-manager get secret cert-manager-webhook-ca -o jsonpath="{.data['tls\.key']}" | base64 -d > tls/tls.key
-fi
-kubectl -n cert-manager create secret generic my-issuer-secret \
-  --from-file=tls.crt=tls/tls.crt \
-  --from-file=tls.key=tls/tls.key \
-  --from-file=ca.crt=tls/ca.crt \
-  -o yaml --dry-run=client | kubectl apply -f -
-kubectl delete ClusterIssuer/${issuerName} > /dev/null 2>&1
-cat <<EOF | kubectl apply -f - > /dev/null 2>&1
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: ${issuerName}
-  namespace: ${issuerNamespace}
-spec:
-  ca:
-    secretName: my-issuer-secret #cert-manager-webhook-ca #ca-key-pair
-EOF
-code=$?
-n=$((n+1))
-if [[ "$n" > 20 ]] 
-then
-    printf "%s\n" "* * * Error - Launching Cert Issuer"
-    exit 1
-fi
-done
-printf "... Done.\n"
 
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+
+
+printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Installing the prometheus-operator via Helm\n"
 # Install Prometheus Operator
 status=$(helm status monitoring --namespace ${scyllaMonitoringNamespace} 2>&1)
@@ -124,7 +85,7 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 fi
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 if [[ ${helmEnabled} == true ]]; then
 printf "Installing the scylla-operator v${operatorTag} via Helm\n"
 status=$(helm status scylla-operator --namespace scylla-operator 2>&1)
@@ -187,7 +148,7 @@ EOF
 printf "Using the context ${context}\n"
 # Install the storageclass scylladb-local-xfs
 if [[ ${context} == *docker* ]]; then
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Installing the scylladb-local-xfs storageclass\n"
 kubectl apply -f=- <<EOF
 apiVersion: storage.k8s.io/v1
@@ -203,7 +164,7 @@ EOF
 
 else
 
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Applying the scylla nodeconfig\n"
 # fix the nodeconfig for the local-csi-driver based on the context (cloud provider k8s type)
 [[ ${context} == *eks* ]] && eks="" || eks="#AWS "
@@ -217,7 +178,7 @@ kubectl -n scylla-operator apply --server-side -f local-csi-driver/nodeconfig.ya
 # Wait for NodeConfig to apply changes to the Kubernetes nodes.
 kubectl wait --for='condition=Reconciled' --timeout=10m nodeconfigs.scylla.scylladb.com/scylladb-nodepool-1
 
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Installing the scylladb-local-xfs storageclass\n"
 kubectl -n=local-csi-driver apply --server-side \
 -f=local-csi-driver/\
@@ -237,6 +198,6 @@ fi
 [[ ${minioEnabled} == true ]] && ./deployMinio.bash ${1}
 fi
 
-printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
+printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 
 date

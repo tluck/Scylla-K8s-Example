@@ -63,7 +63,7 @@ fi
 #sudo security delete-certificate -c "localhost" -t /Library/Keychains/System.keychain 2>/dev/null || true
 
 # Add new cert
-sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /tmp/grafana-cert.pem
+sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/grafana-cert.pem
 
 rm /tmp/grafana-cert.pem
 printf "Grafana certificate added to macOS Keychain\n"
