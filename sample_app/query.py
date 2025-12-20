@@ -8,12 +8,10 @@ import sys
 import argparse
 from asyncio import sleep
 from datetime import datetime, timedelta
-from cassandra.cluster import Cluster
-from cassandra import ConsistencyLevel
-from cassandra.concurrent import execute_concurrent_with_args
-from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
-from cassandra.policies import DCAwareRoundRobinPolicy, TokenAwarePolicy, RoundRobinPolicy
+from cassandra.auth import PlainTextAuthProvider
+from cassandra import ConsistencyLevel
+from cassandra.policies import DCAwareRoundRobinPolicy, TokenAwarePolicy, WhiteListRoundRobinPolicy
 
 parser = argparse.ArgumentParser(description='ScyllaDB table query script')
 parser.add_argument('-s', '--hosts', default="127.0.0.1", help='Comma-separated ScyllaDB node Names or IPs')
@@ -23,17 +21,16 @@ parser.add_argument('-k', '--keyspace', default="mykeyspace", help='Keyspace nam
 parser.add_argument('-t', '--table', default="myTable", help='Table name')
 parser.add_argument('-r', '--row_count', type=int, action="store", dest="row_count", default=100000)
 parser.add_argument('--cl', dest="consistency_level", default="LOCAL_QUORUM", help="Consistency Level (ONE, TWO, QUORUM, ALL, LOCAL_QUORUM, EACH_QUORUM)")
-parser.add_argument('--dc', dest='local_datacenter', default='dc1', help='Local datacenter name for ScyllaDB')
+parser.add_argument('--dc', default='dc1', help='Local datacenter name for ScyllaDB')
 parser.add_argument('--minutes', type=int, default=60, help='How long to run (minutes)')
 parser.add_argument('--interval', type=float, default=1.0, help='Delay between queries (seconds)')
-# parser.add_argument('--dc', dest='local_dc', default='GCE_US_WEST_1', help='Local datacenter name for ScyllaDB')
 opts = parser.parse_args()
 
 hosts = [h.strip() for h in opts.hosts.split(',') if h.strip()]
 username = opts.username
 password = opts.password
 row_count = int(opts.row_count)
-local_datacenter = opts.local_datacenter
+dc = opts.dc
 consistency_level = opts.consistency_level
 ## Define KS + Table
 keyspace = opts.keyspace
@@ -48,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 logger.info(f"Connecting to cluster: {hosts} with user {opts.username}")
 logger.info(f"Using keyspace: {opts.keyspace}, table: {opts.table}")
-logger.info(f"Local DC: {opts.local_datacenter}")
+logger.info(f"Local DC: {opts.dc}")
 logger.info(f"Using consistency level: {opts.consistency_level}") 
 logger.info(f"Row count to insert: {opts.row_count}") 
 
@@ -60,20 +57,28 @@ class TableQueryRunner:
         self.query_count = 0
         self.error_count = 0
         try:
-            if hosts == ['127.0.0.1']:
-                profile = ExecutionProfile(load_balancing_policy=RoundRobinPolicy(), request_timeout=30)
-                self.cluster = Cluster(hosts, 
-                    auth_provider=PlainTextAuthProvider(username=username, password=password),
-                    execution_profiles={EXEC_PROFILE_DEFAULT: profile},
-                    protocol_version=4, connect_timeout=30, control_connection_timeout=30 )
+            local_loopback = (hosts and hosts[0] in ('127.0.0.1', 'localhost'))
+            if local_loopback:
+                # For a single node connection, shard-awareness should be disabled.
+                # This prevents the driver from trying to connect to other discovered nodes.
+                logger.info(f"Using WhiteListRoundRobinPolicy with hosts: {hosts}")
+                policy = WhiteListRoundRobinPolicy(hosts)
+                profile = ExecutionProfile(load_balancing_policy=policy, request_timeout=30)
+                # profile = ExecutionProfile(load_balancing_policy=DCAwareRoundRobinPolicy(local_dc=dc), request_timeout=30)
+                # disable_shard_aware = True
             else:
-                profile = ExecutionProfile(load_balancing_policy=TokenAwarePolicy(DCAwareRoundRobinPolicy(local_dc=local_datacenter)))
-                self.cluster = Cluster(
-                    contact_points= hosts,
-                    auth_provider = PlainTextAuthProvider(username=username, password=password),
-                    protocol_version=4,
-                    connect_timeout=30,
-                    control_connection_timeout=30)
+                profile = ExecutionProfile(load_balancing_policy=TokenAwarePolicy(DCAwareRoundRobinPolicy(local_dc=dc)), request_timeout=30)
+                # disable_shard_aware = False
+                
+            self.cluster = Cluster(
+                contact_points= hosts,
+                shard_aware_options=dict(disable=local_loopback),
+                auth_provider=PlainTextAuthProvider(username=username, password=password),
+                execution_profiles={EXEC_PROFILE_DEFAULT: profile},
+                protocol_version=4,
+                connect_timeout=30,
+                control_connection_timeout=30
+            )
 
             self.session = self.cluster.connect()
             self.session.set_keyspace(self.keyspace)

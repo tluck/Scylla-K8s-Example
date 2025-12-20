@@ -54,7 +54,10 @@ For a multi-dc cluster, change the `init.conf` dataCenterName to dc2 and rerun t
 - cqlsh: use the `client_tls.bash` script to connect to the Scylladb cluster using TLS on the secure port.
 - sctool: use the `manager.bash` script to connect to the manager in its pod.
 
-To create a backup, run `create_backup.bash`, or on the mananger pod run for cloud object storege backups:
+### Backup
+
+To create a backup, run `create_backup.bash`, or on the mananger pod run for cloud object storage backups:
+To use native backup with AWS S3 buckets, run `create_backup.bash -n`.
 
 - Run the following to update the configuuration with authentions
     Note: assuming the cluster is in namespace region1 and named scylla

@@ -66,12 +66,11 @@ else
   developerMode=false
   cloud=""
 fi
-
+minio="#"
+awss3="#"
 if [[ $minioEnabled == true ]]; then
   minio=""
-  awss3="#"
 else
-  minio="#"
   awss3=""
 fi
 # GKE and backup to GCS
@@ -191,6 +190,8 @@ EOF
   # note: the first DNS name is the commonName for role mapping, the rest are SANs
   issuerName="${clusterName}-server-issuer"
   kubectl -n ${scyllaNamespace} delete Certificate ${clusterName}-server-certs > /dev/null 2>&1 
+  dataCenterName1="dc1"
+  dataCenterName2="dc2"
   kubectl -n ${scyllaNamespace} apply --server-side -f=- <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -202,9 +203,12 @@ spec:
   renewBefore: 360h # Renew before expiry (15 days).
   commonName: cassandra
   dnsNames:
-    - ${clusterName}-${dataCenterName}-rack1-0.${scyllaNamespace}.svc
-    - ${clusterName}-${dataCenterName}-rack2-0.${scyllaNamespace}.svc
-    - ${clusterName}-${dataCenterName}-rack3-0.${scyllaNamespace}.svc
+    - ${clusterName}-${dataCenterName1}-rack1-0.${scyllaNamespace}.svc
+    - ${clusterName}-${dataCenterName1}-rack2-0.${scyllaNamespace}.svc
+    - ${clusterName}-${dataCenterName1}-rack3-0.${scyllaNamespace}.svc
+    - ${clusterName}-${dataCenterName2}-rack1-0.${scyllaNamespace}.svc
+    - ${clusterName}-${dataCenterName2}-rack2-0.${scyllaNamespace}.svc
+    - ${clusterName}-${dataCenterName2}-rack3-0.${scyllaNamespace}.svc
   issuerRef:
     name: ${issuerName}
     kind: Issuer        # or ClusterIssuer, depending on what you created
@@ -254,22 +258,36 @@ metadata:
   name: ${clusterName}-config
 data:
   scylla.yaml: |
-    # native_transport_port: 9042
-    # native_transport_port_ssl: 9142
     api_address: 0.0.0.0
     authorizer: CassandraAuthorizer
     ${passAuth}authenticator: PasswordAuthenticator
+    # disable non-TLS ports
+    # ${certAuth}native_transport_port: 9142
+    # ${certAuth}native_shard_aware_transport_port: 19142
     ${certAuth}authenticator: com.scylladb.auth.CertificateAuthenticator
     ${certAuth}auth_certificate_role_queries:
     ${certAuth}  - source: ALTNAME
     ${certAuth}    query: DNS=([^,\s]+)
     ${certAuth}  - source: SUBJECT
     ${certAuth}    query: CN\s*=\s*([^,\s]+)
+    # Override defaults:
+    auto_snapshot: false
+    hinted_handoff_enabled: false
     sstable_compression_dictionaries_retrain_period_in_seconds: 600 # 86400 (24 hours)
     sstable_compression_dictionaries_autotrainer_tick_period_in_seconds: 180 # 900 (15 minutes)
     sstable_compression_dictionaries_min_training_dataset_bytes: 1048576 # 1073741824 (1GB)
     ## enable_repair_based_node_ops: true
     ## allowed_repair_based_node_ops: replace,removenode,rebuild
+    # Native Backup
+    ${useS3}object_storage_endpoints:
+    ${awss3}- name: s3.${awsRegion}.amazonaws.com
+    ${awss3}  port: 443
+    ${awss3}  https: true
+    ${awss3}  aws_region: ${awsRegion}
+    ${minio}- name: minio.minio
+    ${minio}  port: 9000
+    ${minio}  https: false
+    ${minio}  aws_region: local
     # Other options
     ${certs}client_encryption_options:
       ${certs}enabled: ${enableTLS}
