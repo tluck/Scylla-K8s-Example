@@ -8,6 +8,8 @@ else
   location="s3:${s3BucketName}"
 fi
 
+[[ $1 == '-n' ]] && native=true || native=false
+
 # check status
 kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool status
 
@@ -26,4 +28,10 @@ fi
 
 # make a backup
 printf "Making a backup of cluster: ${scyllaNamespace}/${clusterName} to ${location}\n"
-kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${scyllaNamespace}/${clusterName} -L ${location}
+if [[ $native == true ]]; then
+  printf "Using native method\n"
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${scyllaNamespace}/${clusterName} -L ${location} --method native
+else
+  printf "Using rclone method\n"
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${scyllaNamespace}/${clusterName} -L ${location}
+fi

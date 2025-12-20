@@ -104,8 +104,7 @@ def _build_cluster_and_session(hosts, username, password, dc, local_loopback, sh
     # Create fresh Cluster/Session per process, post-fork
     ssl_context = SSLContext(PROTOCOL_TLS_CLIENT)
     ssl_context.minimum_version = TLSVersion.TLSv1_2  # Allows 1.2+ including 1.3
-    # ssl_context.maximum_version = TLSVersion.TLSv1_3  # Strict TLS 1.3 only if needed
-    #ssl_context.options |= OP_NO_TLSv1 | OP_NO_TLSv1_1 | OP_NO_TLSv1_2
+    ssl_context.maximum_version = TLSVersion.TLSv1_3  # Strict TLS 1.3 only if needed
     ssl_context.load_verify_locations('./config/ca.crt')  # Server CA
     ssl_context.verify_mode = CERT_REQUIRED
     ssl_context.load_cert_chain(certfile='./config/tls.crt', keyfile='./config/tls.key')
