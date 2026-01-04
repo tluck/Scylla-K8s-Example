@@ -36,34 +36,42 @@ fi
 
 username=$( kubectl -n ${scyllaNamespace} get secret/${clusterName}-grafana-admin-credentials --template '{{ index .data "username" }}' | base64 -d )
 password=$( kubectl -n ${scyllaNamespace} get secret/${clusterName}-grafana-admin-credentials --template '{{ index .data "password" }}' | base64 -d )
-printf  "\nGrafana credentials: \n\thttps://localhost:3000 \n\tUsername: ${username} \n\tPassword: ${password} \n\n"
+printf  "\nGrafana credentials: \n\thttps://scylla-grafana:3000 \n\tUsername: ${username} \n\tPassword: ${password} \n\n"
 
 if [[ ! -z ${username} ]]; then
   printf "Port-forward service/${clusterName}-grafana 3000:3000\n"
   kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-grafana 3000:3000 > /dev/null 2>&1 &
   printf "Port-forward service/${scyllaNamespace}-prometheus 9090:9090\n"
   kubectl -n ${scyllaNamespace} port-forward service/${clusterName}-prometheus 9090:9090 > /dev/null 2>&1 &
+  # add names to /etc/hosts
+  # Check if the exact line exists (flexible whitespace matching)
+  if ! grep -q "^127\.0\.0\.1\s\+scylla-client\s\+external-client\s\+scylla-grafana" /etc/hosts; then
+    printf "Adding ScyllaDB entries to /etc/hosts...\n"
+    echo "127.0.0.1 scylla-client external-client scylla-grafana" | sudo tee -a /etc/hosts > /dev/null
+    printf "✓ Added: 127.0.0.1 scylla-client external-client scylla-grafana\n"
+  else
+    printf "✓ ScyllaDB entries already present in /etc/hosts\n"
+  fi
 fi
 
-# until curl -k -s https://localhost:3000 > /dev/null 2>&1; do
+# until curl -k -s https://scylla-grafana:3000 > /dev/null 2>&1; do
 #   printf "Waiting for Grafana...\n"
 #   sleep 2
 # done
 
 # Download certificate
 sleep 2
+if [[ -e /usr/bin/security ]]; then
 echo -n | openssl s_client -connect localhost:3000 2>/dev/null | \
   openssl x509 -outform PEM > /tmp/grafana-cert.pem
-if [[ ! -s /tmp/grafana-cert.pem ]]; then
+  if [[ ! -s /tmp/grafana-cert.pem ]]; then
   printf "Failed to retrieve Grafana certificate\n"
   exit 1
-fi
-
-# Remove old cert if exists
-#sudo security delete-certificate -c "localhost" -t /Library/Keychains/System.keychain 2>/dev/null || true
-
-# Add new cert
-sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/grafana-cert.pem
-
-rm /tmp/grafana-cert.pem
-printf "Grafana certificate added to macOS Keychain\n"
+  fi
+  # Remove old cert if exists
+  sudo security delete-certificate -c "localhost" -t /Library/Keychains/System.keychain 2>/dev/null || true
+  # Add new cert
+  sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/grafana-cert.pem
+  rm /tmp/grafana-cert.pem
+  printf "Grafana certificate added to macOS Keychain\n"
+fi  

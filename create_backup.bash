@@ -17,8 +17,8 @@ kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-m
 if [[ ${mTLS} == true ]]; then
   printf "Updating the cluster with TLS creds\n"
   kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool cluster update -c ${scyllaNamespace}/${clusterName} \
-    --ssl-user-cert-file /var/run/secrets/scylla-manager/client-certs/tls.crt \
-    --ssl-user-key-file /var/run/secrets/scylla-manager/client-certs/tls.key  \
+    --ssl-user-cert-file /var/run/secrets/${clusterName}-client-certs/tls.crt \
+    --ssl-user-key-file  /var/run/secrets/${clusterName}-client-certs/tls.key \
     --force-non-ssl-session-port=false --force-tls-disabled=false
 else
   printf "Updating the cluster with Username creds\n"

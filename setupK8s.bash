@@ -42,7 +42,7 @@ printf "Label nodes for Scylla deployment\n"
 fi
 
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
-printf "Installing the cert manager via Helm\n"
+printf "Installing the Cert-Manager via Helm\n"
 # Install the cert-manager
 status=$(helm status cert-manager --namespace cert-manager 2>&1)
 if [[ ${status} == *"not found"* ]]; then
@@ -51,9 +51,9 @@ helm install cert-manager jetstack/cert-manager --namespace cert-manager --creat
   --set "webhook.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
   --set "cainjector.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
   --set "startupapicheck.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}"
+else
+  printf "✓ Cert-Manager is already installed\n"
 fi
-
-
 
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Installing the prometheus-operator via Helm\n"
@@ -80,10 +80,16 @@ helm install monitoring prometheus-community/kube-prometheus-stack \
   --set "kube-state-metrics.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
   --set "prometheus-node-exporter.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
   --set "prometheusOperator.nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}"
+sleep 5
+# kubectl -n ${scyllaMonitoringNamespace} wait deployment/monitoring-kube-prometheus-operator --for=condition=Available=True --timeout=90s
+printf "Deleting the default Grafana deployment created by the Prometheus Operator\n" 
+kubectl -n ${scyllaMonitoringNamespace} delete deployment/monitoring-grafana
 if [ $? -ne 0 ]; then
   printf "%s\n" "* * * Error - Launching Prometheus Operator"
   exit 1
 fi
+else
+  printf "✓ Prometheus Operator is already installed\n"
 fi
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 if [[ ${helmEnabled} == true ]]; then
@@ -145,7 +151,6 @@ spec:
   scyllaUtilsImage: docker.io/scylladb/scylla:${utilsImage}
 EOF
 
-printf "Using the context ${context}\n"
 # Install the storageclass scylladb-local-xfs
 if [[ ${context} == *docker* ]]; then
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'

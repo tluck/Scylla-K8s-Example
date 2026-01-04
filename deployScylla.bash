@@ -21,7 +21,7 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
     kubectl -n ${scyllaNamespace} delete Certificate/${clusterName}-server-certs
     kubectl -n ${scyllaNamespace} delete Certificate/${clusterName}-client-certs
     kubectl -n ${scyllaNamespace} delete Issuer/${clusterName}-server-issuer
-    kubectl -n ${scyllaNamespace} delete Issuer/${clusterName}-client-issuer
+    kubectl -n ${scyllaNamespace} delete ClusterIssuer/${clusterName}-client-issuer
 
   # remove the rest of the resources such PCVs, PVs and namespaces
   if [[ ${1} == '-x' ]]; then
@@ -273,11 +273,12 @@ data:
     # Override defaults:
     auto_snapshot: false
     hinted_handoff_enabled: false
+    compaction_static_shares: 100
     sstable_compression_dictionaries_retrain_period_in_seconds: 600 # 86400 (24 hours)
     sstable_compression_dictionaries_autotrainer_tick_period_in_seconds: 180 # 900 (15 minutes)
     sstable_compression_dictionaries_min_training_dataset_bytes: 1048576 # 1073741824 (1GB)
-    ## enable_repair_based_node_ops: true
-    ## allowed_repair_based_node_ops: replace,removenode,rebuild
+    # enable_repair_based_node_ops: true
+    # allowed_repair_based_node_ops: replace,removenode,rebuild
     # Native Backup
     ${useS3}object_storage_endpoints:
     ${awss3}- name: s3.${awsRegion}.amazonaws.com
@@ -402,18 +403,18 @@ if [[ ${customCerts} == true || ${mTLS} == true ]]; then
   kubectl -n ${scyllaNamespace} get secret    ${clusterName}-local-client-ca -o jsonpath="{.data['tls\.crt']}" | base64 -d > tls/client/tls.crt
   kubectl -n ${scyllaNamespace} get secret    ${clusterName}-local-client-ca -o jsonpath="{.data['tls\.key']}" | base64 -d > tls/client/tls.key
   fi
-  kubectl -n ${scyllaNamespace} delete secret ${issuerName}-secret > /dev/null 2>&1
-  kubectl -n ${scyllaNamespace} create secret generic ${issuerName}-secret \
+  kubectl -n cert-manager delete secret ${issuerName}-secret > /dev/null 2>&1
+  kubectl -n cert-manager create secret generic ${issuerName}-secret \
     --from-file=tls.crt=tls/client/tls.crt \
     --from-file=tls.key=tls/client/tls.key \
     --from-file=ca.crt=tls/client/ca.crt \
     -o yaml --dry-run=client | kubectl apply -f -
 cat <<EOF | kubectl apply -f - > /dev/null 2>&1
 apiVersion: cert-manager.io/v1
-kind: Issuer
+kind: ClusterIssuer
 metadata:
   name: ${issuerName}
-  namespace: ${scyllaNamespace}
+  #namespace: ${scyllaNamespace}
 spec:
   ca:
     secretName: ${issuerName}-secret
@@ -421,7 +422,7 @@ EOF
   code=1
   n=0
   while [ $code -eq 1 ]; do
-  kubectl -n ${scyllaNamespace} get Issuer/${issuerName} > /dev/null 2>&1
+  kubectl get ClusterIssuer/${issuerName} > /dev/null 2>&1
   code=$?
   n=$((n+1))
   if [[ $n -gt 20 ]]; then
@@ -436,8 +437,10 @@ EOF
 #kubectl -n ${scyllaNamespace} delete Certificate ${clusterName}-client-certs > /dev/null 2>&1
 # generate the client certificate using the new cert-manager
   printf "Creating the client certificates: ${clusterName}-client-certs\n"
-  kubectl -n ${scyllaNamespace} delete Certificate ${clusterName}-client-certs > /dev/null 2>&1 
-  kubectl -n ${scyllaNamespace} apply --server-side -f=- <<EOF
+  [[ $( kubectl get ns ${scyllaManagerNamespace} 2>/dev/null ) ]] || kubectl create ns ${scyllaManagerNamespace}
+  for ns in ${scyllaNamespace} ${scyllaManagerNamespace}; do
+  kubectl -n ${ns} delete Certificate ${clusterName}-client-certs > /dev/null 2>&1 
+  kubectl -n ${ns} apply --server-side -f=- <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -452,7 +455,7 @@ spec:
     - admin
   issuerRef:
     name: ${issuerName}
-    kind: Issuer        # or ClusterIssuer, depending on what you created
+    kind: ClusterIssuer
     group: cert-manager.io
   usages:
     - "digital signature"    # Required for TLS handshake
@@ -461,6 +464,7 @@ spec:
 EOF
     # - ${clusterName}-client.${scyllaNamespace}.svc
     # - external-client.${scyllaNamespace}.svc
+  done
 fi # end of mTLS or customCerts
 
 printf "Scylla Cluster resources created successfully.\n"
@@ -500,7 +504,7 @@ kubectl -n ${scyllaNamespace} apply --server-side -f=- <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: prometheus
+  name: "${clusterName}-prometheus"
 rules:
   - apiGroups: [""]
     resources:
@@ -530,7 +534,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: prometheus
+  name: "${clusterName}-prometheus"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -547,9 +551,10 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-      app.kubernetes.io/name: prometheus #-${clusterName}
-      app.kubernetes.io/instance: prometheus
-      prometheus: prometheus #-${clusterName}
+      app.kubernetes.io/name: prometheus
+      app.kubernetes.io/instance: "${clusterName}" #prometheus
+      operator.prometheus.io/name: "${clusterName}" #prometheus
+      prometheus: "${clusterName}" #prometheus
   ports:
     - name: web
       protocol: TCP
@@ -558,8 +563,7 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: Prometheus
 metadata:
-  name: prometheus #-${scyllaNamespace}
-# [names]
+  name: "${clusterName}"
 spec:
   serviceAccountName: "${clusterName}-prometheus"
   serviceName: "${clusterName}-prometheus"
@@ -570,8 +574,7 @@ spec:
     limits:
       cpu: "2"
       memory: "2Gi"
-  # [/names]
-  version: "v3.7.2"
+  version: "${prometheusVersion}" # "v3.7.2"
   securityContext:
     runAsNonRoot: true
     runAsUser: 65534
@@ -604,7 +607,8 @@ spec:
         port: web
 EOF
 
-
+# Patch to set the default dashboard to scylla-overview.master.json and set the scrape interval
+printf "Patching the Grafana config to set the default dashboard to scylla-overview.master.json\n"
 kubectl -n ${scyllaNamespace} get configmap ${clusterName}-grafana-configs -o yaml \
   | sed -e 's|default_home.*json|default_home_dashboard_path = /var/run/dashboards/scylladb/scylladb-master/scylla-overview.master.json|' \
   | kubectl -n ${scyllaNamespace} apply set-last-applied --create-annotation=true -f -
@@ -629,6 +633,9 @@ kubectl -n ${scyllaNamespace} patch deployment ${clusterName}-grafana --type='js
     ]
   }]"
 
+# kubectl -n ${scyllaNamespace} rollout restart deployment ${clusterName}-grafana
+kubectl -n ${scyllaNamespace} get rs -o name|grep ${clusterName} |xargs kubectl -n ${scyllaNamespace} delete $1
+
 # wait for the grafana deployment to be ready
 kubectl -n ${scyllaNamespace} wait scylladbmonitoring/${clusterName} --for=condition=Available=True --timeout=90s
 username=$( kubectl -n ${scyllaNamespace} get secret/${clusterName}-grafana-admin-credentials --template '{{ index .data "username" }}' | base64 -d )
@@ -636,7 +643,7 @@ password=$( kubectl -n ${scyllaNamespace} get secret/${clusterName}-grafana-admi
 printf  "\nGrafana credentials: \n\tUsername: ${username} \n\tPassword: ${password} \n\n"
 
 #  wait for the prometheus deployment to be ready
-kubectl -n ${scyllaNamespace} patch prometheus prometheus --type='json' -p='[
+kubectl -n ${scyllaNamespace} patch prometheus ${clusterName} --type='json' -p='[
   {
     "op": "add",
     "path": "/spec/ruleNamespaceSelector",
@@ -649,7 +656,7 @@ kubectl -n ${scyllaNamespace} patch prometheus prometheus --type='json' -p='[
   }
 ]'
 
-kubectl -n ${scyllaNamespace} rollout restart statefulset prometheus-prometheus
+kubectl -n ${scyllaNamespace} rollout restart statefulset prometheus-${clusterName}
 
 # Install Scylla Manager
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
@@ -660,7 +667,7 @@ else
   printf "Creating the ScyllaManager resources via Kubectl\n"
   templateFile="templateManager.yaml"
 fi
-[[ $( kubectl get ns ${scyllaManagerNamespace}  2>/dev/null ) ]] || kubectl create ns ${scyllaManagerNamespace}
+[[ $( kubectl get ns ${scyllaManagerNamespace} 2>/dev/null ) ]] || kubectl create ns ${scyllaManagerNamespace}
 
 if [[ ${customCerts} == true ]]; then
   printf "Using custom certificates for Scylla Manager\n"
@@ -682,7 +689,7 @@ spec:
     - "*.${scyllaManagerNamespace}.svc.cluster.local"
   issuerRef:
     name: ${issuerName}
-    kind: Issuer
+    kind: ClusterIssuer
   usages:
     - "digital signature"    # Required for TLS handshake
     - "key encipherment"     # Required for key exchange
@@ -708,6 +715,10 @@ cat ${templateFile} | sed \
     -e "s|MANAGERDBMEMORYLIMIT|${managerDbMemoryLimit}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     -e "s|NODESELECTOR|${nodeSelector0}|g" \
+    -e "s|#v19 |${v19}|g" \
+    -e "s|#v18 |${v18}|g" \
+    -e "s|CLUSTERNAME|${clusterName}|g" \
+    -e "s|#CUSTC |${certs}|g" \
     > ${yaml}
 if [[ ${helmEnabled} == true ]]; then
   helm install scylla-manager scylla/scylla-manager --create-namespace --namespace ${scyllaManagerNamespace} -f ${yaml}
