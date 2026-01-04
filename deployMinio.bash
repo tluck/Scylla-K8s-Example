@@ -16,6 +16,9 @@ else
 printf "\n%s\n" '-----------------------------------------------------------------------------------------------'
 printf "Installing the Minio S3 Server\n"
 
+status=$(helm status minio-operator --namespace minio-operator 2>&1)
+if [[ ${status} == *"not found"* ]]; then
+
 printf "\nDeploying minio-operator via Helm\n"
 helm install minio-operator \
   --namespace minio-operator \
@@ -61,4 +64,7 @@ kubectl -n minio exec -it $(kubectl get pods --namespace minio -l "v1.min.io/ten
 sleep 10
 kubectl -n minio get svc minio -o yaml | sed -e "s|: 80|: 9000|" | kubectl replace -f -
 
+else
+  printf "✓ Minio is already installed\n"
+fi
 fi

@@ -117,20 +117,26 @@ spec:
           limits:
             cpu: 100m
             memory: 200Mi
-        volumeMounts:
-        - mountPath: /mnt/etc/scylla-manager
-          name: scylla-manager-config
         readinessProbe:
           httpGet:
             path: /api/v1/clusters
             port: 5080
           periodSeconds: 10
           timeoutSeconds: 3
+        volumeMounts:
+        - name: scylla-manager-config
+          mountPath: /mnt/etc/scylla-manager
+        #CUSTC - name: CLUSTERNAME-client-certs
+        #CUSTC   readOnly: true
+        #CUSTC   mountPath: /var/run/secrets/scylla-client-certs/
       volumes:
-      - configMap:
+      - name: scylla-manager-config
+        configMap:
           name: scylla-manager-config
-        name: scylla-manager-config
-    
+      #CUSTC - name: CLUSTERNAME-client-certs
+      #CUSTC   secret:
+      #CUSTC     secretName: CLUSTERNAME-client-certs
+      #CUSTC     defaultMode: 420
 ---
 apiVersion: scylla.scylladb.com/v1
 kind: ScyllaCluster
@@ -143,9 +149,8 @@ spec:
   repository: docker.io/scylladb/scylla
   agentRepository: docker.io/scylladb/scylla-manager-agent
   developerMode: DEVMODE
-  cpuset: true
-  sysctls:
-    - fs.aio-max-nr=30000000
+  #DEV sysctls:
+  #DEV   - fs.aio-max-nr=30000000
   datacenter:
     name: DATACENTER
     racks:

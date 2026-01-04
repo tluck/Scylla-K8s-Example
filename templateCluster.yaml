@@ -26,15 +26,14 @@ spec:
         type: BROADCASTNODESTYPE
     nodeService:
       type: NODESERVICETYPE
-  cpuset: true # deprecated
-  #v18 sysctls: # deprecated
-  #v18   - fs.aio-max-nr=30000000
-  #v18   - fs.nr_open=1073741816
-  #v18   - fs.file-max=9223372036854775807
+  #DEV sysctls: # deprecated
+  #DEV   - fs.aio-max-nr=30000000
+  #DEV   - fs.nr_open=1073741816
+  #DEV   - fs.file-max=9223372036854775807
   #MDC externalSeeds:
-  #MDC  - EXTERNAL-SEED-1
-  #MDC  - EXTERNAL-SEED-2
-  #MDC  - EXTERNAL-SEED-3
+  #MDC   - EXTERNAL-SEED-1
+  #MDC   - EXTERNAL-SEED-2
+  #MDC   - EXTERNAL-SEED-3
   datacenter:
     name: DATACENTER
     racks:
