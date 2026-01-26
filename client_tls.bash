@@ -30,7 +30,7 @@ if [[ ${1} == '-p' ]]; then
   usepod=true
 #fi  
 #if [[ ${usepod} == true ]]; then
-  podIPs=( $( kubectl -n ${scyllaNamespace} get pod -l scylla/cluster=${clusterName} -o='jsonpath={.items[*].status.podIP}' ) )
+  podIPs=( $( kubectl -n ${clusterNamespace} get pod -l scylla/cluster=${clusterName} -o='jsonpath={.items[*].status.podIP}' ) )
   hostname=${podIPs[0]}
   port=9142
   printf "Using the podIP ${hostname}:${port} for the client connection\n"
@@ -41,25 +41,25 @@ else
 fi  
 
 
-SCYLLADB_DISCOVERY_EP="$( kubectl -n ${scyllaNamespace} get service/${clusterName}-client -o='jsonpath={.spec.clusterIP}' )"
+SCYLLADB_DISCOVERY_EP="$( kubectl -n ${clusterNamespace} get service/${clusterName}-client -o='jsonpath={.spec.clusterIP}' )"
 if [[ ${customCerts} == true ]]; then
-  kubectl -n ${scyllaNamespace} get secret/${clusterName}-client-certs -o='jsonpath={.data.tls\.crt}' | base64 -d > "${SCYLLADB_CONFIG}/tls.crt"
-  kubectl -n ${scyllaNamespace} get secret/${clusterName}-client-certs -o='jsonpath={.data.tls\.key}' | base64 -d > "${SCYLLADB_CONFIG}/tls.key"
-  kubectl -n ${scyllaNamespace} get secret/${clusterName}-server-certs -o='jsonpath={.data.ca\.crt}'  | base64 -d > "${SCYLLADB_CONFIG}/ca.crt"
+  kubectl -n ${clusterNamespace} get secret/${clusterName}-client-certs -o='jsonpath={.data.tls\.crt}' | base64 -d > "${SCYLLADB_CONFIG}/tls.crt"
+  kubectl -n ${clusterNamespace} get secret/${clusterName}-client-certs -o='jsonpath={.data.tls\.key}' | base64 -d > "${SCYLLADB_CONFIG}/tls.key"
+  kubectl -n ${clusterNamespace} get secret/${clusterName}-server-certs -o='jsonpath={.data.ca\.crt}'  | base64 -d > "${SCYLLADB_CONFIG}/ca.crt"
 else
   # these 2 certs are signed with serving-ca
-  #kubectl -n ${scyllaNamespace} get secret/${clusterName}-local-serving-certs    -o='jsonpath={.data.tls\.crt}' | base64 -d > "${SCYLLADB_CONFIG}/tls.crt"
-  #kubectl -n ${scyllaNamespace} get secret/${clusterName}-local-serving-certs    -o='jsonpath={.data.tls\.key}' | base64 -d > "${SCYLLADB_CONFIG}/tls.key"
+  #kubectl -n ${clusterNamespace} get secret/${clusterName}-local-serving-certs    -o='jsonpath={.data.tls\.crt}' | base64 -d > "${SCYLLADB_CONFIG}/tls.crt"
+  #kubectl -n ${clusterNamespace} get secret/${clusterName}-local-serving-certs    -o='jsonpath={.data.tls\.key}' | base64 -d > "${SCYLLADB_CONFIG}/tls.key"
   # these 2 certs are signed with client-ca - which is the default for client_encryption
   if [[ ${mTLS} == true ]]; then
-    kubectl -n ${scyllaNamespace} get secret/${clusterName}-client-certs      -o='jsonpath={.data.tls\.crt}' | base64 -d > "${SCYLLADB_CONFIG}/tls.crt"
-    kubectl -n ${scyllaNamespace} get secret/${clusterName}-client-certs      -o='jsonpath={.data.tls\.key}' | base64 -d > "${SCYLLADB_CONFIG}/tls.key"  
+    kubectl -n ${clusterNamespace} get secret/${clusterName}-client-certs      -o='jsonpath={.data.tls\.crt}' | base64 -d > "${SCYLLADB_CONFIG}/tls.crt"
+    kubectl -n ${clusterNamespace} get secret/${clusterName}-client-certs      -o='jsonpath={.data.tls\.key}' | base64 -d > "${SCYLLADB_CONFIG}/tls.key"  
   else
-    kubectl -n ${scyllaNamespace} get secret/${clusterName}-local-user-admin  -o='jsonpath={.data.tls\.crt}' | base64 -d > "${SCYLLADB_CONFIG}/tls.crt"
-    kubectl -n ${scyllaNamespace} get secret/${clusterName}-local-user-admin  -o='jsonpath={.data.tls\.key}' | base64 -d > "${SCYLLADB_CONFIG}/tls.key"
+    kubectl -n ${clusterNamespace} get secret/${clusterName}-local-user-admin  -o='jsonpath={.data.tls\.crt}' | base64 -d > "${SCYLLADB_CONFIG}/tls.crt"
+    kubectl -n ${clusterNamespace} get secret/${clusterName}-local-user-admin  -o='jsonpath={.data.tls\.key}' | base64 -d > "${SCYLLADB_CONFIG}/tls.key"
   fi
   # this CA is for the client_config certs local-serving-certs
-  kubectl -n ${scyllaNamespace} get configmap/${clusterName}-local-serving-ca -o='jsonpath={.data.ca-bundle\.crt}'       > "${SCYLLADB_CONFIG}/ca.crt"
+  kubectl -n ${clusterNamespace} get configmap/${clusterName}-local-serving-ca -o='jsonpath={.data.ca-bundle\.crt}'       > "${SCYLLADB_CONFIG}/ca.crt"
 fi
 
 cat <<EOF > "${SCYLLADB_CONFIG}/cqlshrc"

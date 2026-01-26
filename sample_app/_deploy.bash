@@ -3,7 +3,7 @@
 source init.conf
 
 if [[ ${1} == "-h" ]]; then
-    printf "%s\n" "Usage: $0 [scyllaNamespace] [image]"
+    printf "%s\n" "Usage: $0 [clusterNamespace] [image]"
     exit 0
 fi
 delete=""
@@ -12,12 +12,12 @@ if [[ $1 == "-d" ]]; then
     shift;
 fi
 
-scyllaNamespace=${1:-${scyllaNamespace}}
+clusterNamespace=${1:-${clusterNamespace}}
 imageVersion=${2:-3.12-slim}
 appName="myapplication"
 
 # set the current context to scylla
-kubectl config set-context $(kubectl config current-context) --namespace=${scyllaNamespace}
+kubectl config set-context $(kubectl config current-context) --namespace=${clusterNamespace}
 
 context=$(kubectl config current-context)
 
@@ -31,7 +31,7 @@ fi
 
 
 if [[ ${delete}  == "-d" ]]; then
-  kubectl --namespace=${scyllaNamespace} delete pod/application ||true
+  kubectl --namespace=${clusterNamespace} delete pod/application ||true
 
 else
 
@@ -78,6 +78,10 @@ spec:
       key:  kubernetes.io/arch
       operator: Equal
       value: arm64
+    - effect: NoSchedule
+      key: scylla-operator.scylladb.com/dedicated
+      operator: Equal
+      value: application
   volumes:
     - name: devshm
       emptyDir:
@@ -87,8 +91,8 @@ EOF
 
 printf "\n%s\n" "Lauching the Pod and awaiting to be ready"
 # Create the Pod to run the python job
-kubectl -n ${scyllaNamespace} apply -f ${appName}.yaml
-kubectl -n ${scyllaNamespace} wait --for=condition=ready pod/${appName} --timeout=150s
+kubectl -n ${clusterNamespace} apply -f ${appName}.yaml
+kubectl -n ${clusterNamespace} wait --for=condition=ready pod/${appName} --timeout=150s
 
 #n=$((n+1))
 #nc=$((nc+1))

@@ -11,28 +11,28 @@ fi
 [[ $1 == '-n' ]] && native=true || native=false
 
 # check status
-printf "\nCluster status for cluster: ${scyllaNamespace}/${clusterName}\n"
+printf "\nCluster status for cluster: ${clusterNamespace}/${clusterName}\n"
 kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool status
 
 # update credentials
 if [[ ${mTLS} == true ]]; then
   printf "\nUpdating the cluster with TLS creds\n"
-  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool cluster update -c ${scyllaNamespace}/${clusterName} \
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool cluster update -c ${clusterNamespace}/${clusterName} \
     --ssl-user-cert-file /var/run/secrets/${clusterName}-client-certs/tls.crt \
     --ssl-user-key-file  /var/run/secrets/${clusterName}-client-certs/tls.key \
     --force-non-ssl-session-port=false --force-tls-disabled=false
 else
   printf "\nUpdating the cluster with Username creds\n"
-  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool cluster update -c ${scyllaNamespace}/${clusterName} \
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool cluster update -c ${clusterNamespace}/${clusterName} \
     --username cassandra --password cassandra
 fi
 
 # make a backup
-printf "\nMaking a backup of cluster: ${scyllaNamespace}/${clusterName} to ${location}\n"
+printf "\nMaking a backup of cluster: ${clusterNamespace}/${clusterName} to ${location}\n"
 if [[ $native == true ]]; then
   printf "... using native method\n"
-  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${scyllaNamespace}/${clusterName} -L ${location} --method native
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${clusterNamespace}/${clusterName} -L ${location} --method native
 else
   printf "... using rclone method\n"
-  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${scyllaNamespace}/${clusterName} -L ${location}
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${clusterNamespace}/${clusterName} -L ${location}
 fi

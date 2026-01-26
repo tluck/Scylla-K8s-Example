@@ -467,7 +467,7 @@ resource "aws_eks_node_group" "application" {
 
   subnet_ids = var.singlezone ? [aws_subnet.public_subnet_1.id] : [aws_subnet.public_subnet_1.id , aws_subnet.public_subnet_2.id, aws_subnet.public_subnet_3.id ]
 
-  instance_types  = [local.instance_type1]
+  instance_types  = [local.instance_type2]
   capacity_type   = var.capacity_type
   version         = var.eks_nodegroup_version
   release_version = var.arch == "arm64" ? data.aws_ssm_parameter.eks_ami_arm64.value : data.aws_ssm_parameter.eks_ami_x86.value
@@ -482,6 +482,12 @@ resource "aws_eks_node_group" "application" {
     "scylla.scylladb.com/node-type" = "application"
     Owner                           = "sa_demo_scylladb_com"
     Name                            = "sa-demo-cluster"
+  }
+
+  taint {
+    key    = "scylla-operator.scylladb.com/dedicated"
+    value  = "application"
+    effect = "NO_SCHEDULE"
   }
 
   scaling_config {
