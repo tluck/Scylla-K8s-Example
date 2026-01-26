@@ -11,11 +11,11 @@ fi
 [[ $1 == '-n' ]] && native=true || native=false
 
 # check status
-printf "\nCluster status for cluster: ${scyllaNamespace}/${clusterName}\n"
-kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool status -c ${scyllaNamespace}/${clusterName}
+printf "\nCluster status for cluster: ${clusterNamespace}/${clusterName}\n"
+kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool status -c ${clusterNamespace}/${clusterName}
 
 # make a backup
-printf "\nListing the backup tasks for cluster: ${scyllaNamespace}/${clusterName} to ${location}\n"
-kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool tasks -c ${scyllaNamespace}/${clusterName} -t backup  --show-properties 
-printf "\nListing the backup info for cluster: ${scyllaNamespace}/${clusterName} to ${location}\n"
-kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup list -c ${scyllaNamespace}/${clusterName}
+printf "\nListing the backup tasks for cluster: ${clusterNamespace}/${clusterName} to ${location}\n"
+kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool tasks -c ${clusterNamespace}/${clusterName} -t backup  --show-properties 
+printf "\nListing the backup info for cluster: ${clusterNamespace}/${clusterName} to ${location}\n"
+kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup list -c ${clusterNamespace}/${clusterName}

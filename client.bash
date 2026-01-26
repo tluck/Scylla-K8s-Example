@@ -9,7 +9,7 @@ host=${1:-127.0.0.1}
 [[ -e init.conf ]] && source init.conf
 
 if [[ ${1} == '-r' ]]; then
-  kubectl -n ${scyllaNamespace} exec -it service/${clusterName}-client -c scylla -- cqlsh -u cassandra -p cassandra --connect-timeout=30 --request-timeout=30
+  kubectl -n ${clusterNamespace} exec -it service/${clusterName}-client -c scylla -- cqlsh -u cassandra -p cassandra --connect-timeout=30 --request-timeout=30
 else
   cqlsh -u cassandra -p cassandra --connect-timeout=30 --request-timeout=30 ${host}
 fi
