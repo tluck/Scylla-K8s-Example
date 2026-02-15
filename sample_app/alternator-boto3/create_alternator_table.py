@@ -65,20 +65,10 @@ def main():
         if e.response['Error']['Code'] == 'ResourceNotFoundException':
             logger.info(f"Table '{table_name}' does not exist. Creating...")
             dynamodb.create_table(
-                AttributeDefinitions=[
-                    {
-                        'AttributeName': 'key',
-                        'AttributeType': 'S'
-                    },
-                ],
+                AttributeDefinitions=[ { 'AttributeName': 'key', 'AttributeType': 'S' }, ],
                 BillingMode='PAY_PER_REQUEST',
                 TableName=table_name,
-                KeySchema=[
-                    {
-                        'AttributeName': 'key',
-                        'KeyType': 'HASH'
-                    },
-                ]
+                KeySchema=[ { 'AttributeName': 'key', 'KeyType': 'HASH' }, ]
             )
             # Optional: Wait for ACTIVE
             table.meta.client.get_waiter('table_exists').wait(TableName=table_name)

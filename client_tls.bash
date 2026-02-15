@@ -35,7 +35,7 @@ if [[ ${1} == '-p' ]]; then
   port=9142
   printf "Using the podIP ${hostname}:${port} for the client connection\n"
 else
-  hostname=${1:-${clusterName}-client}
+  hostname=${1:-${clusterName}-client.${clusterNamespace}.svc}
   port=${2:-9142}
   printf "Using service endpoint ${hostname}:${port} for the client connection\n"
 fi  

@@ -1,16 +1,24 @@
-# Use the Python 3.12 slim image
-ARG VERSION=3.12-slim
+# Use the Python slim image
+ARG VERSION=3.14
 FROM python:${VERSION}
 
 # Set the working directory in the container
 WORKDIR /app
 
-RUN apt update -y
-RUN apt install -y jq python3-pip git tar vim curl
+RUN apt-get update && apt-get install -y \
+    jq git tar vim curl \
+  && rm -rf /var/lib/apt/lists/*
 # Copy the requirements.txt file and install dependencies
-# Copy the Python script into the container
-COPY requirements.txt run*bash *.py alternator/ /app
-RUN pip3 install --no-cache-dir -r requirements.txt
+COPY requirements.txt /app
+# Single pip upgrade + install (USE python3.14 -m pip ONLY)
+# CRITICAL: Single pip run, verify stdlib first
+#RUN python3.14 -c "from compression._common import _streams; print('Stdlib ✓')" \
+#  && python3.14 -m pip install --no-cache-dir --upgrade pip \
+#  && python3.14 -m pip install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --no-cache-dir --upgrade pip \
+  && python3 -m pip install --no-cache-dir -r requirements.txt
+# Copy the Python scripts into the container
+COPY run*bash get*bash *.py alternator-boto3/ alternator-client/*py /app
 
 # run
 CMD ["sleep", "infinity"]

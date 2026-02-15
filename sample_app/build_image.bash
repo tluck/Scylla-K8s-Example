@@ -2,7 +2,7 @@
 
 [[ -e init.conf ]] && source init.conf
 myRegistry=docker.io
-imageVersion="3.12-slim"
+imageVersion="3.14.3-slim"
 
 #if [[ ${myRegistry} == public* ]]; then
 #    aws ecr-public get-login-password --region ${region} | docker login --username AWS --password-stdin ${myRegistry}

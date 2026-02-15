@@ -7,13 +7,12 @@ metadata:
     app: scylla
     app.kubernetes.io/name: scylla
     scylla/cluster: scylla
-    scylla-operator.scylladb.com/scylla-service-type: identity
-  name: external-client
+  name: scylla-client-external
 spec:
   allocateLoadBalancerNodePorts: true
   externalTrafficPolicy: Local
-  healthCheckNodePort: 31043
-  internalTrafficPolicy: Cluster
+  #healthCheckNodePort: 31043
+  internalTrafficPolicy: Local
   ipFamilies:
   - IPv4
   ipFamilyPolicy: SingleStack

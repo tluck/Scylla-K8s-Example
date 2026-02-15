@@ -12,16 +12,17 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
     helm uninstall scylla          --namespace ${clusterNamespace}
     helm uninstall scylla-manager  --namespace ${scyllaManagerNamespace}
   else
-    kubectl -n ${clusterNamespace}        delete scyllaCluster/${clusterName}
+    kubectl -n ${clusterNamespace}       delete scyllaCluster/${clusterName}
     kubectl -n ${scyllaManagerNamespace} delete deployment/scylla-manager
     kubectl -n ${scyllaManagerNamespace} delete scyllaCluster/scylla-manager
     # kubectl -n ${scyllaManagerNamespace} delete -f ${clusterNamespace}.ScyllaManager.yaml
   fi
     kubectl -n ${clusterNamespace} delete -f ${clusterNamespace}-${clusterName}.ScyllaDBMonitoring.yaml
+    kubectl -n ${clusterNamespace} delete Prometheus/prometheus
     kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-server-certs
     kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-client-certs
     kubectl -n ${clusterNamespace} delete Issuer/${clusterName}-server-issuer
-    kubectl -n ${clusterNamespace} delete ClusterIssuer/${clusterName}-client-issuer
+    kubectl                        delete ClusterIssuer/${clusterName}-client-issuer
 
   # remove the rest of the resources such PCVs, PVs and namespaces
   if [[ ${1} == '-x' ]]; then
@@ -465,8 +466,9 @@ spec:
     - "key encipherment"     # Required for key exchange
     - "client auth"
 EOF
+# dns names but not needed
     # - ${clusterName}-client.${clusterNamespace}.svc
-    # - external-client.${clusterNamespace}.svc
+    # - ${clusterName}-client-external.${clusterNamespace}.svc
   done
 fi # end of mTLS or customCerts
 
