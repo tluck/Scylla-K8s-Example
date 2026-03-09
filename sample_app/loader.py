@@ -22,10 +22,10 @@ from ssl import SSLContext, TLSVersion, CERT_REQUIRED, PROTOCOL_TLS_CLIENT
 # Constants
 COMPRESSION = "'sstable_compression': 'ZstdWithDictsCompressor'"
 TABLETS = "true"
-DATE_FORMAT = '%Y-%m-%d'
-LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 
 # Logging Setup
+DATE_FORMAT = '%Y-%m-%d'
+LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -35,8 +35,8 @@ def parse_args():
     parser.add_argument('-l', '--loopback', action="store_true", help='Use loopback interface')
     parser.add_argument('-m', '--mtls', action="store_true", help='Use mtls for authentication (overrides username/password)')
     parser.add_argument('-e', '--tls', action="store_true", help='Use tls for connection with username/password)')
-    parser.add_argument('-u', '--username', default="cassandra", help='Cassandra username')
-    parser.add_argument('-p', '--password', default="cassandra", help='Cassandra password')
+    parser.add_argument('-u', '--username', default="cassandra", help='ScyllaDB username')
+    parser.add_argument('-p', '--password', default="cassandra", help='ScyllaDB password')
     parser.add_argument('-k', '--keyspace', default="myKeyspace", help='Keyspace name')
     parser.add_argument('-t', '--table', default="myTable", help='Table name')
     parser.add_argument('-d', '--drop', action="store_true", help='Drop table if exists')
@@ -146,7 +146,7 @@ def _build_cluster_and_session(hosts, port, username, password, dc, loopback):
     # Common cluster params
     common_kwargs = {
         'contact_points': hosts,
-        'port': int(port),  # Ensure int
+        'port': int(port),
         'ssl_context': ssl_context,
         'ssl_options': ssl_options,
         'execution_profiles': {EXEC_PROFILE_DEFAULT: profile},

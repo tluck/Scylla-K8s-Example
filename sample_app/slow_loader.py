@@ -17,8 +17,8 @@ from cassandra.policies import DCAwareRoundRobinPolicy, TokenAwarePolicy, RoundR
 ## Script args and Help
 parser = argparse.ArgumentParser(add_help=True)
 parser.add_argument('-s', '--hosts', default="127.0.0.1", help='Comma-separated ScyllaDB node Names or IPs')
-parser.add_argument('-u', '--username', default="cassandra", help='Cassandra username')
-parser.add_argument('-p', '--password', default="cassandra", help='Cassandra password')
+parser.add_argument('-u', '--username', default="cassandra", help='ScyllaDB username')
+parser.add_argument('-p', '--password', default="cassandra", help='ScyllaDB password')
 parser.add_argument('-k', '--keyspace', default="mykeyspace", help='Keyspace name')
 parser.add_argument('-t', '--table', default="myTable", help='Table name')
 parser.add_argument('-r', '--row_count', type=int, action="store", dest="row_count", default=10000)

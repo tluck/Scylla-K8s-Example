@@ -18,7 +18,7 @@ COPY requirements.txt /app
 RUN python3 -m pip install --no-cache-dir --upgrade pip \
   && python3 -m pip install --no-cache-dir -r requirements.txt
 # Copy the Python scripts into the container
-COPY run*bash get*bash *.py alternator-boto3/ alternator-client/*py /app
+COPY run*bash get*bash *.py alternator-boto3/ alternator-client/*py alternator-client/*bash /app 
 
 # run
 CMD ["sleep", "infinity"]

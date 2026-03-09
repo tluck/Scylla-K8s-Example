@@ -37,6 +37,7 @@ def main():
                 BillingMode='PAY_PER_REQUEST'  # Or 'PROVISIONED' with capacity units
             )
             print(f"Created table {TABLE_NAME}")
+            
         except ClientError as e:
             if e.response['Error']['Code'] != 'ResourceInUseException':
                 raise
@@ -44,9 +45,11 @@ def main():
 
     # Sample data to insert
     users = [
-        {'UserID': 'user1', 'Name': 'Alice',   'Score': '95'},
-        {'UserID': 'user2', 'Name': 'Bob',     'Score': '87'},
-        {'UserID': 'user3', 'Name': 'Charlie', 'Score': '92'}
+        {'UserID': 'user1', 'Name': 'Alice',   'Score': '95', 'date': '2026-01-01'},
+        {'UserID': 'user1', 'Name': 'Alice',   'Score': '85', 'date': '2026-01-02'},
+        {'UserID': 'user1', 'Name': 'Alice',   'Score': '75', 'date': '2026-01-03'},
+        {'UserID': 'user2', 'Name': 'Bob',     'Score': '87', 'date': '2026-01-01'},
+        {'UserID': 'user3', 'Name': 'Charlie', 'Score': '92', 'date': '2026-01-01'},
     ]
 
     # Use the resource interface

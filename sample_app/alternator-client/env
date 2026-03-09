@@ -1,0 +1,5 @@
+export CONTACT_POINTS="node-0.aws-us-west-2.6081f40a1bb45d3c6daa.clusters.scylla.cloud" 
+# "node-1.aws-us-west-2.6081f40a1bb45d3c6daa.clusters.scylla.cloud", "node-2.aws-us-west-2.6081f40a1bb45d3c6daa.clusters.scylla.cloud"
+export USERNAME="scylla"
+export PASSWORD="DZL9wN5PAfGl2Eh"
+export DC="AWS_US_WEST_2"
