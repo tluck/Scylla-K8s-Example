@@ -46,6 +46,8 @@ def parse_args():
     parser.add_argument('--dc', default='dc1', help='Local datacenter name for ScyllaDB')
     parser.add_argument('-w', '--workers', type=int, default=0, help='Number of worker processes (0 = cpu_count())')
     parser.add_argument('-o', '--offset', type=int, default=0, help='Offset for ID generation to avoid collisions across runs')
+    parser.add_argument( '--buckets', type=int, default=256, help='Number of partition buckets (id %% buckets). More buckets = less hotspot risk per partition.',
+    )
     return parser.parse_args()
 
 def str_time_prop(start, end, fmt, prop):
@@ -60,17 +62,22 @@ def random_date(start, end, prop):
 def create_schema(session, keyspace, table, tablets, compression):
     create_ks = f"""
         CREATE KEYSPACE IF NOT EXISTS {keyspace}
-        WITH replication = {{'class' : 'org.apache.cassandra.locator.NetworkTopologyStrategy', 'replication_factor' : 3}}
+        WITH replication = {{'class' : 'NetworkTopologyStrategy', 'replication_factor' : 3}}
         AND tablets = {{'enabled': {tablets} }};
     """
+    # Single table: bucket spreads partitions; id is unique clustering key
     create_table = f"""CREATE TABLE IF NOT EXISTS {keyspace}.{table}
-        (id int PRIMARY KEY, ssn text, imei text, os text, phonenum text, balance float, pdate date, v1 text, v2 text, v3 text, v4 text, v5 text)
+        (bucket int, id int, ssn text, imei text, os text, phonenum text, balance float, pdate date, message text, PRIMARY KEY (bucket, id))
         WITH compression = {{ {compression} }}
         ;"""
     session.execute(create_ks)
     session.execute(create_table)
 
-def generate_row(fake, i):
+def generate_row(fake, row_id, num_buckets):
+    bucket = row_id % num_buckets
+    if bucket < 0:
+        bucket += num_buckets
+
     ssn = '-'.join([str(random.randint(100,999)), str(random.randint(10,99)), str(random.randint(1000,9999))])
     imei = str(random.randint(100000000000000,999999999999999))
     os_name = random.choice(['Android','iOS','Windows','Samsung','Nokia'])
@@ -78,17 +85,19 @@ def generate_row(fake, i):
     bal = round(random.uniform(10.5, 999.5), 2)
     dat = random_date("2019-01-01", "2019-04-01", random.random())
     base_string = f"IMEI:{imei}|OS:{os_name}|Phone:{phone}"
-    v = []
-    for _ in range(5):
+    message = []
+    for _ in range(1):
         if len(base_string) < 200:
             sentences = []
             while sum(len(s) for s in sentences) < 200 - len(base_string):
                 sentences.append(fake.sentence())
             padding = ' '.join(sentences)[:200 - len(base_string)]
-            v.append(base_string + padding)
+            message.append(base_string + padding)
         else:
-            v.append(base_string[:200])
-    return (i, ssn, imei, os_name, phone, bal, dat, *v)
+            message.append(base_string[:200])
+    
+    return (bucket, row_id, ssn, imei, os_name, phone, bal, dat, *message)
+
 
 def chunked_ids(start_id, end_id, batch_size):
     i = start_id
@@ -184,7 +193,8 @@ def _worker_insert_range(
     start_id,
     end_id,
     batch_size,
-    offset
+    offset,
+    num_buckets,
 ):
     # Per-process RNG
     _init_worker_rng(worker_index)
@@ -192,15 +202,16 @@ def _worker_insert_range(
     cluster, session = _build_cluster_and_session(hosts, port, username, password, dc, loopback)
     try:
         # Prepare statement per worker
-        cql = f"""INSERT INTO {keyspace}.{table} (id, ssn, imei, os, phonenum, balance, pdate, v1, v2, v3, v4, v5) VALUES (?,?,?,?,?,?,?, ?,?,?,?,?)"""
+        cql = f"""INSERT INTO {keyspace}.{table} (bucket, id, ssn, imei, os, phonenum, balance, pdate, message) VALUES (?,?,?,?,?,?,?,?, ?)"""
         prepared = session.prepare(cql)
         prepared.consistency_level = getattr(ConsistencyLevel, consistency_level)
 
         total = 0
         total_failed = 0
         for (s_id, e_id) in chunked_ids(start_id, end_id, batch_size):
-            batch = [generate_row(fake, i+offset) for i in range(s_id, e_id + 1)]
+            batch = [generate_row(fake, i + offset, num_buckets) for i in range(s_id, e_id + 1)]
             results = execute_concurrent_with_args(session, prepared, batch, concurrency=100)
+
             failed = sum(1 for (success, _) in results if not success)
             total += len(batch)
             total_failed += failed
@@ -233,7 +244,8 @@ def insert_data_parallel(
     row_count,
     batch_size,
     workers,
-    offset
+    offset,
+    num_buckets,
 ):
     # One control session in parent to create schema (safe and simple)
     ctrl_cluster, ctrl_session = _build_cluster_and_session(hosts, port, username, password, dc, loopback)
@@ -254,7 +266,10 @@ def insert_data_parallel(
     procs = max(1, procs)
     span = ceil(row_count / procs)
 
-    logger.info(f"Starting {procs} workers, total rows={row_count}, per-worker target≈{span}, batch_size={batch_size}")
+    logger.info(
+        f"Starting {procs} workers, total rows={row_count}, buckets={num_buckets}, "
+        f"per-worker target≈{span}, batch_size={batch_size}"
+    )
 
     ctx = get_context("spawn")
     with ctx.Pool(processes=procs) as pool:
@@ -280,7 +295,8 @@ def insert_data_parallel(
                     start_id=start_id,
                     end_id=end_id,
                     batch_size=batch_size,
-                    offset=offset
+                    offset=offset,
+                    num_buckets=num_buckets,
                 )
             ))
         pool.close()
@@ -334,7 +350,10 @@ def main():
     logger.info(f"Using keyspace: {opts.keyspace}, table: {opts.table}")
     logger.info(f"Local DC: {opts.dc}")
     logger.info(f"Using consistency level: {opts.cl}")
-    logger.info(f"Row count to insert: {opts.row_count}")
+    logger.info(f"Row count to insert: {opts.row_count}, partition buckets: {opts.buckets}")
+    if opts.buckets < 1:
+        logger.error("--buckets must be >= 1")
+        sys.exit(1)
     logger.info(f"Workers: {opts.workers or cpu_count()}")
     if opts.loopback:
         logger.info(f"Force Loopback: {opts.loopback}")
@@ -372,7 +391,8 @@ def main():
             row_count=opts.row_count,
             batch_size=opts.batch_size,
             workers=opts.workers,
-            offset=opts.offset
+            offset=opts.offset,
+            num_buckets=opts.buckets,
         )
         elapsed = datetime.datetime.now() - start_time
         logger.info(f"Total insertion time: {elapsed}")

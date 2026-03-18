@@ -1,43 +1,46 @@
 #!/usr/bin/env bash
 
+# set -eo pipefail
+
 date
 [[ -e init.conf ]] && source init.conf
 
-[[ ${1} == '-c' ]] && clusterOnly=true
-if [[ ${1} == '-d' || ${1} == '-x' ]]; then
+options=${1:-""}
+[[ ${options} == '-c' ]] && clusterOnly=true || clusterOnly=false
+if [[ ${options} == '-d' || ${options} == '-x' ]]; then
 
   printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
   # deletes CRDs, deployments, pods - but leaves PVCs, configmaps, secrets and services and service accounts (unless using -x)
   if [[ ${helmEnabled} == true ]]; then
-    helm uninstall scylla          --namespace ${clusterNamespace}
-    helm uninstall scylla-manager  --namespace ${scyllaManagerNamespace}
+    helm uninstall scylla          --namespace ${clusterNamespace} || true
+    helm uninstall scylla-manager  --namespace ${scyllaManagerNamespace} || true
   else
-    kubectl -n ${clusterNamespace}       delete scyllaCluster/${clusterName}
-    kubectl -n ${scyllaManagerNamespace} delete deployment/scylla-manager
-    kubectl -n ${scyllaManagerNamespace} delete scyllaCluster/scylla-manager
+    kubectl -n ${clusterNamespace}       delete scyllaCluster/${clusterName} || true
+    kubectl -n ${scyllaManagerNamespace} delete deployment/scylla-manager || true
+    kubectl -n ${scyllaManagerNamespace} delete scyllaCluster/scylla-manager || true
     # kubectl -n ${scyllaManagerNamespace} delete -f ${clusterNamespace}.ScyllaManager.yaml
   fi
-    kubectl -n ${clusterNamespace} delete -f ${clusterNamespace}-${clusterName}.ScyllaDBMonitoring.yaml
-    kubectl -n ${clusterNamespace} delete Prometheus/prometheus
-    kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-server-certs
-    kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-client-certs
-    kubectl -n ${clusterNamespace} delete Issuer/${clusterName}-server-issuer
-    kubectl                        delete ClusterIssuer/${clusterName}-client-issuer
+    kubectl -n ${clusterNamespace} delete -f ${clusterNamespace}-${clusterName}.ScyllaDBMonitoring.yaml || true
+    kubectl -n ${clusterNamespace} delete Prometheus/prometheus || true
+    kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-server-certs || true
+    kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-client-certs || true
+    kubectl -n ${clusterNamespace} delete Issuer/${clusterName}-server-issuer || true
+    kubectl                        delete ClusterIssuer/${clusterName}-client-issuer || true
 
   # remove the rest of the resources such PCVs, PVs and namespaces
-  if [[ ${1} == '-x' ]]; then
-    kubectl -n ${clusterNamespace} patch  $( kubectl -n ${clusterNamespace} get ScyllaDBManagerTask -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge
-    kubectl -n ${clusterNamespace} patch  $( kubectl -n ${clusterNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge
-    kubectl -n ${scyllaManagerNamespace} patch  $( kubectl -n ${scyllaManagerNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge
+  if [[ ${options} == '-x' ]]; then
+    kubectl -n ${clusterNamespace} patch  $( kubectl -n ${clusterNamespace} get ScyllaDBManagerTask -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+    kubectl -n ${clusterNamespace} patch  $( kubectl -n ${clusterNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+    kubectl -n ${scyllaManagerNamespace} patch  $( kubectl -n ${scyllaManagerNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
 
-    kubectl -n ${clusterNamespace} delete $( kubectl -n ${clusterNamespace} get pvc -o name| grep ${clusterName} | grep -v scylla-manager |grep -v prometheus )
-    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.storageClassName=="scylladb-local-xfs" and .spec.claimRef.namespace == $ns) | .metadata.name')
-    kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name | grep manager)
-    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaManagerNamespace} '.items[] | select(.spec.claimRef.namespace == $ns) | .metadata.name' )
-    kubectl -n ${clusterNamespace} delete $( kubectl -n ${clusterNamespace} get pvc -o name | grep prometheus)
-    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.claimRef.namespace == $ns ) | .metadata.name' )
-    kubectl delete ns ${clusterNamespace}
-    kubectl delete ns ${scyllaManagerNamespace}
+    kubectl -n ${clusterNamespace} delete $( kubectl -n ${clusterNamespace} get pvc -o name| grep ${clusterName} | grep -v scylla-manager |grep -v prometheus ) || true
+    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.storageClassName=="scylladb-local-xfs" and .spec.claimRef.namespace == $ns) | .metadata.name') || true
+    kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name | grep manager) || true
+    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaManagerNamespace} '.items[] | select(.spec.claimRef.namespace == $ns) | .metadata.name' ) || true
+    kubectl -n ${clusterNamespace} delete $( kubectl -n ${clusterNamespace} get pvc -o name | grep prometheus) || true
+    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.claimRef.namespace == $ns ) | .metadata.name' ) || true
+    kubectl delete ns ${clusterNamespace} || true
+    kubectl delete ns ${scyllaManagerNamespace} || true
   fi
   exit 0
 fi 
@@ -47,7 +50,7 @@ fi
 printf "Using context: ${context}\n"
 kubectl get sc -o name|grep xfs 
 if [[ $? != 0 ]]; then
-    printf "\n* * * Error - Mising storage class - run setupK8s.bash\n"
+    printf "\n* * * Error - Missing storage class - run setUpK8s.bash\n"
     exit 1
 fi
 
@@ -113,7 +116,7 @@ fi
 
 if [[ ${backupEnabled} == true ]]; then
   bak=""
-  kubectl -n ${clusterNamespace} delete secret ${clusterName}-agent-config-secret > /dev/null 2>&1
+  kubectl -n ${clusterNamespace} delete secret ${clusterName}-agent-config-secret > /dev/null 2>&1 || true
   printf "Backup is enabled - Creating a secret to define the backup location\n"
   kubectl -n ${clusterNamespace} apply --server-side -f - <<EOF
   apiVersion: v1
@@ -129,8 +132,8 @@ if [[ ${backupEnabled} == true ]]; then
     ${minio}provider: Minio
     ${minio}endpoint: http://minio.minio:9000
     ${minio}no_check_bucket: true
-    ${awss3}#access_key_id: ${AWS_ACCESS_KEY_ID}
-    ${awss3}#secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+    ${awss3}#access_key_id: ${AWS_ACCESS_KEY_ID:-""}
+    ${awss3}#secret_access_key: ${AWS_SECRET_ACCESS_KEY:-""}
     ${awss3}provider: AWS
     ${awss3}endpoint: https://s3.${awsRegion}.amazonaws.com
     ${awss3}region: ${awsRegion}
@@ -144,8 +147,8 @@ if [[ ${customCerts} == true ]]; then
   printf "Using custom certificates for Scylla nodes\n"
   ## method to create proper certs with a subject.
   issuerName="${clusterName}-server-issuer"
-  kubectl -n ${clusterNamespace} get Issuer/${issuerName} > /dev/null 2>&1
-  if [[ $? == 0 ]]; then
+  issuer=$( kubectl -n ${clusterNamespace} get Issuer/${issuerName} 2>/dev/null )
+  if [[ -n "${issuer}" ]]; then
     printf "%s\n" "Issuer/${issuerName} already exists"
   else
     printf "Creating a cert-manager to generate server certificates for Scylla ...\n"
@@ -157,7 +160,7 @@ if [[ ${customCerts} == true ]]; then
       kubectl -n cert-manager get secret cert-manager-webhook-ca -o jsonpath="{.data['tls\.crt']}" | base64 -d > tls/server/tls.crt
       kubectl -n cert-manager get secret cert-manager-webhook-ca -o jsonpath="{.data['tls\.key']}" | base64 -d > tls/server/tls.key
     fi
-    kubectl -n ${clusterNamespace} delete secret ${issuerName}-secret > /dev/null 2>&1
+    kubectl -n ${clusterNamespace} delete secret ${issuerName}-secret > /dev/null 2>&1 || true
     kubectl -n ${clusterNamespace} create secret generic ${issuerName}-secret \
       --from-file=tls.crt=tls/server/tls.crt \
       --from-file=tls.key=tls/server/tls.key \
@@ -173,18 +176,11 @@ spec:
   ca:
     secretName: ${issuerName}-secret #cert-manager-webhook-ca #ca-key-pair
 EOF
-  code=1
-  n=0
-  while [ $code -eq 1 ]; do
-    kubectl -n ${clusterNamespace} get Issuer/${issuerName} > /dev/null 2>&1
-    code=$?
-    n=$((n+1))
-    if [[ $n -gt 20 ]]; then
-        printf "%s\n" "* * * Error - Launching Cert Issuer"
-        exit 1
-    fi
-    sleep 5
-  done
+  printf "Waiting for Issuer to become ready...\n"
+  if ! kubectl wait --for=condition=Ready "issuer/${issuerName}" -n "${clusterNamespace}" --timeout=120s; then
+      printf "%s\n" "* * * Error - Timed out waiting for Cert Issuer to become ready"
+      exit 1
+  fi
   printf "... Done.\n"
   fi # end of else
 
@@ -192,7 +188,7 @@ EOF
   # make certs for Scylla using the new cert-manager
   # note: the first DNS name is the commonName for role mapping, the rest are SANs
   issuerName="${clusterName}-server-issuer"
-  kubectl -n ${clusterNamespace} delete Certificate ${clusterName}-server-certs > /dev/null 2>&1 
+  kubectl -n ${clusterNamespace} delete Certificate ${clusterName}-server-certs > /dev/null 2>&1 || true
   dataCenterName1="dc1"
   dataCenterName2="dc2"
   kubectl -n ${clusterNamespace} apply --server-side -f=- <<EOF
@@ -234,7 +230,7 @@ else
 fi 
 [[ ${enableAlternator} == true ]] && alt=""|| alt="#ALT "; 
 # create a configMap to define Scylla options
-kubectl -n ${clusterNamespace} delete configmap ${clusterName}-config > /dev/null 2>&1
+kubectl -n ${clusterNamespace} delete configmap ${clusterName}-config > /dev/null 2>&1 || true
 [[ ${gcs} == "" ]] && CTorG=""|| CTorG="#CTorG "
 certs="#CERTS "
 # generate the configMap only if auth is enabled and not using Helm
@@ -253,6 +249,7 @@ if [[ ${enableAuth} == true && ${helmEnabled} == false ]]; then
     cust_certs="# "
     oper_certs=""
   fi
+  [[ ${dbVersion} == "2026"* ]] && rf_rack_valid_keyspaces=false || rf_rack_valid_keyspaces=true
   # generate the configMap
   kubectl -n ${clusterNamespace} apply --server-side -f=- <<EOF
 apiVersion: v1
@@ -274,10 +271,11 @@ data:
     ${certAuth}  - source: SUBJECT
     ${certAuth}    query: CN\s*=\s*([^,\s]+)
     # Override defaults:
+    audit: none
     auto_snapshot: false
     hinted_handoff_enabled: false
     compaction_static_shares: 100
-    rf_rack_valid_keyspaces: true
+    rf_rack_valid_keyspaces: ${rf_rack_valid_keyspaces}
     sstable_compression_dictionaries_retrain_period_in_seconds: 600 # 86400 (24 hours)
     sstable_compression_dictionaries_autotrainer_tick_period_in_seconds: 180 # 900 (15 minutes)
     sstable_compression_dictionaries_min_training_dataset_bytes: 1048576 # 1073741824 (1GB)
@@ -407,7 +405,7 @@ if [[ ${customCerts} == true || ${mTLS} == true ]]; then
   kubectl -n ${clusterNamespace} get secret    ${clusterName}-local-client-ca -o jsonpath="{.data['tls\.crt']}" | base64 -d > tls/client/tls.crt
   kubectl -n ${clusterNamespace} get secret    ${clusterName}-local-client-ca -o jsonpath="{.data['tls\.key']}" | base64 -d > tls/client/tls.key
   fi
-  kubectl -n cert-manager delete secret ${issuerName}-secret > /dev/null 2>&1
+  kubectl -n cert-manager delete secret ${issuerName}-secret > /dev/null 2>&1 || true
   kubectl -n cert-manager create secret generic ${issuerName}-secret \
     --from-file=tls.crt=tls/client/tls.crt \
     --from-file=tls.key=tls/client/tls.key \
@@ -423,27 +421,21 @@ spec:
   ca:
     secretName: ${issuerName}-secret
 EOF
-  code=1
-  n=0
-  while [ $code -eq 1 ]; do
-  kubectl get ClusterIssuer/${issuerName} > /dev/null 2>&1
-  code=$?
-  n=$((n+1))
-  if [[ $n -gt 20 ]]; then
-      printf "%s\n" "* * * Error - Launching Cert Issuer"
+  printf "Waiting for Issuer to become ready...\n"
+  if ! kubectl wait --for=condition=Ready "ClusterIssuer/${issuerName}" --timeout=120s; then
+      printf "%s\n" "* * * Error - Timed out waiting for Cert Issuer to become ready"
       exit 1
   fi
-  sleep 5
-  done
   printf "... Done.\n"
   fi # end of else
 
-#kubectl -n ${clusterNamespace} delete Certificate ${clusterName}-client-certs > /dev/null 2>&1
+  printf "Creating the server certificates\n"
+# kubectl -n ${clusterNamespace} delete Certificate ${clusterName}-client-certs > /dev/null 2>&1
 # generate the client certificate using the new cert-manager
   printf "Creating the client certificates: ${clusterName}-client-certs\n"
   [[ $( kubectl get ns ${scyllaManagerNamespace} 2>/dev/null ) ]] || kubectl create ns ${scyllaManagerNamespace}
   for ns in ${clusterNamespace} ${scyllaManagerNamespace}; do
-  kubectl -n ${ns} delete Certificate ${clusterName}-client-certs > /dev/null 2>&1 
+  kubectl -n ${ns} delete Certificate ${clusterName}-client-certs > /dev/null 2>&1  || true
   kubectl -n ${ns} apply --server-side -f=- <<EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -639,7 +631,7 @@ kubectl -n ${clusterNamespace} patch deployment ${clusterName}-grafana --type='j
   }]"
 
 # kubectl -n ${clusterNamespace} rollout restart deployment ${clusterName}-grafana
-kubectl -n ${clusterNamespace} get rs -o name|grep ${clusterName} |xargs kubectl -n ${clusterNamespace} delete $1
+kubectl -n ${clusterNamespace} get rs -o name|grep ${clusterName} |xargs kubectl -n ${clusterNamespace} delete ${1:-}
 
 # wait for the grafana deployment to be ready
 kubectl -n ${clusterNamespace} wait scylladbmonitoring/${clusterName} --for=condition=Available=True --timeout=90s
@@ -703,7 +695,7 @@ spec:
 EOF
 fi
 
-kubectl -n ${scyllaManagerNamespace} delete configmap scylla-manager-config > /dev/null 2>&1
+kubectl -n ${scyllaManagerNamespace} delete configmap scylla-manager-config > /dev/null 2>&1 || true
 yaml=${clusterNamespace}-${clusterName}.ScyllaManager.yaml
 cat ${templateFile} | sed \
     -e "s|NAMESPACE|${scyllaManagerNamespace}|g" \

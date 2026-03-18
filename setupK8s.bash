@@ -133,12 +133,12 @@ sleep 5
 # update the scylla-operator config
 # printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${dbVersion}\n"
 
-if [[ ${operatorTag} == "latest" || ${operatorTag} == *1.19* ]]; then
+# if [[ ${operatorTag} == "latest" || ${operatorTag} == *1.19* ]]; then
   utilsImage=${dbVersion}
-  [[ ${context} == *eks* ]] && utilsImage="2025.1.9" # because of the EKS 1.19 image bug
-else
-  utilsImage="2025.1.9"
-fi
+  # [[ ${context} == *eks* ]] && utilsImage="2025.1.9" # because of the EKS 1.19 image bug
+# else
+  # utilsImage="2025.1.9"
+# fi
 
 # the 2025.2.x and 2025.3.x images have a bug that prevents the scylla-operator from working properly
 printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${utilsImage}\n"
@@ -155,13 +155,13 @@ EOF
 if [[ ${context} == *docker* ]]; then
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Installing the scylladb-local-xfs storageclass\n"
-kubectl apply -f=- <<EOF
+kubectl apply -f - <<EOF
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: scylladb-local-xfs
   annotations:
-    storageclass.kubernetes.io/is-default-class: "false"  # Mark as default
+    storageclass.kubernetes.io/is-default-class: "false"
 provisioner: rancher.io/local-path
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer

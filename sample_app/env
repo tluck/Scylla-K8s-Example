@@ -1,0 +1,4 @@
+export HOSTS="node-0.gce-us-west-1.0006ab8f55853443c0fc.clusters.scylla.cloud" #, "node-1.gce-us-west-1.0006ab8f55853443c0fc.clusters.scylla.cloud", "node-2.gce-us-west-1.0006ab8f55853443c0fc.clusters.scylla.cloud"
+export DC=GCE_US_WEST_1
+export USERNAME=scylla
+export PASSWORD=iBF7Iv46MtyfQdx

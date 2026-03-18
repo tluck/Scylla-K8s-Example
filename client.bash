@@ -1,20 +1,40 @@
 #!/usr/bin/env bash
 
-if [[ ${1} == '-h' ]]; then
-  echo "Usage: $0 [-r] [host]"
-  echo "   Default host is scylla-client"
-  echo "   -r uses kubectl exec"
-  exit 0
-fi
+set -euo pipefail
 
+script_dir=$(dirname "$0")
+[[ -e "${script_dir}/init.conf" ]] && source "${script_dir}/init.conf"
 
-if [[ ${1} == '-r' ]]; then
-    script_dir=$(dirname "$0")
-    [[ -e ${script_dir}/init.conf ]] && source ${script_dir}/init.conf
-set -x
-    kubectl -n ${clusterNamespace} exec -it service/${clusterName}-client -c scylla -- cqlsh -u cassandra -p cassandra --connect-timeout=30 --request-timeout=30
-set +x
+# Allow overriding from environment, with defaults
+cql_user="${CQL_USER:-cassandra}"
+cql_pass="${CQL_PASSWORD:-cassandra}"
+
+usage() {
+    echo "Usage: $0 [-h] [-r] [host]"
+    echo "  A cqlsh wrapper script."
+    echo
+    echo "Options:"
+    echo "  -r        Connect via 'kubectl exec' into the client service."
+    echo "  -h        Display this help message."
+    echo "  [host]    The target host to connect to (default: scylla-client)."
+}
+
+use_kubectl=false
+host="scylla-client"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -r) use_kubectl=true; shift ;;
+        -h) usage; exit 0 ;;
+        *) host="$1"; shift ;;
+    esac
+done
+
+if [[ "${use_kubectl}" == true ]]; then
+    echo "Connecting via kubectl to service/${clusterName}-client in namespace ${clusterNamespace}..."
+    kubectl -n "${clusterNamespace}" exec -it "service/${clusterName}-client" -c scylla -- \
+        cqlsh -u "${cql_user}" -p "${cql_pass}" --connect-timeout=30 --request-timeout=30
 else
-    host=${1:-scylla-client}
-    cqlsh -u cassandra -p cassandra --connect-timeout=30 --request-timeout=30 ${host}
+    echo "Connecting to host: ${host}..."
+    cqlsh -u "${cql_user}" -p "${cql_pass}" --connect-timeout=30 --request-timeout=30 "${host}"
 fi

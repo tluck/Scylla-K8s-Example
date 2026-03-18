@@ -39,7 +39,9 @@ else
 #k8sNodeCount=1 
 #while [ $n -lt $num ]; do
 # assume 2 node groups and the scylla cluster in node-0-* and the python3-apps can run on node-1-*
+
 #if [[ ${useCache} == true ]]; then
+  kubectl -n "${clusterNamespace}" delete pod/"${appName}" --ignore-not-found --wait --timeout=120s
   kubectl -n ${clusterNamespace} apply --server-side -f=- <<EOF
 apiVersion: v1
 kind: Pod

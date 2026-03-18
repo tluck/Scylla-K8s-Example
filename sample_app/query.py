@@ -20,6 +20,13 @@ parser.add_argument('-p', '--password', default="cassandra", help='ScyllaDB pass
 parser.add_argument('-k', '--keyspace', default="mykeyspace", help='Keyspace name')
 parser.add_argument('-t', '--table', default="myTable", help='Table name')
 parser.add_argument('-r', '--row_count', type=int, action="store", dest="row_count", default=100000)
+parser.add_argument('-o', '--offset', type=int, default=0, help='ID offset (must match loader)')
+parser.add_argument(
+    '--buckets',
+    type=int,
+    default=256,
+    help='Partition bucket count (must match loader: id %% buckets)',
+)
 parser.add_argument('--cl', dest="consistency_level", default="LOCAL_QUORUM", help="Consistency Level (ONE, TWO, QUORUM, ALL, LOCAL_QUORUM, EACH_QUORUM)")
 parser.add_argument('--dc', default='dc1', help='Local datacenter name for ScyllaDB')
 parser.add_argument('--minutes', type=int, default=60, help='How long to run (minutes)')
@@ -30,6 +37,8 @@ hosts = [h.strip() for h in opts.hosts.split(',') if h.strip()]
 username = opts.username
 password = opts.password
 row_count = int(opts.row_count)
+id_offset = int(opts.offset)
+num_buckets = int(opts.buckets)
 dc = opts.dc
 consistency_level = opts.consistency_level
 ## Define KS + Table
@@ -47,7 +56,7 @@ logger.info(f"Connecting to cluster: {hosts} with user {opts.username}")
 logger.info(f"Using keyspace: {opts.keyspace}, table: {opts.table}")
 logger.info(f"Local DC: {opts.dc}")
 logger.info(f"Using consistency level: {opts.consistency_level}") 
-logger.info(f"Row count to insert: {opts.row_count}") 
+logger.info(f"Row count to query: {opts.row_count}, id offset: {id_offset}, buckets: {num_buckets}")
 
 class TableQueryRunner:
     def __init__(self, hosts, keyspace, table, username, password):
@@ -90,37 +99,40 @@ class TableQueryRunner:
             sys.exit(1)
 
     def prepare_queries(self):
-        self.queries = [
-            f"SELECT * FROM {self.table} where id=? LIMIT 10"
-        ]
-        self.prepared_queries = []
-        for query in self.queries:
-            try:
-                prepared = self.session.prepare(query)
-                # Convert string to ConsistencyLevel enum
-                prepared.consistency_level = getattr(ConsistencyLevel, consistency_level)
-                self.prepared_queries.append(prepared)
-                logger.info(f"Prepared query: {query}")
-            except Exception as e:
-                logger.warning(f"Failed to prepare query '{query}': {e}")
+        q = f"SELECT * FROM {self.keyspace}.{self.table} WHERE bucket = ? AND id = ?"
+        try:
+            prepared = self.session.prepare(q)
+            prepared.consistency_level = getattr(ConsistencyLevel, consistency_level)
+            self.main_query = prepared
+            logger.info(f"Prepared query: {q}")
+        except Exception as e:
+            logger.warning(f"Failed to prepare query: {e}")
+            self.main_query = None
 
     def execute_query(self):
-        if not self.prepared_queries:
-            logger.error("No prepared queries available")
+        if not self.main_query:
+            logger.error("No prepared query available")
             return False
+
         try:
-            # query = random.choice(self.prepared_queries)
-            id=random.randint(1, row_count)
-            query = self.prepared_queries[0]
-            result = self.session.execute(query, (id,))
-            rows = list(result)
+            rid = id_offset + random.randint(1, row_count)
+            b = rid % num_buckets
+            logger.info(f"Querying bucket={b} id={rid}")
+
+            main_result = self.session.execute(self.main_query, (b, rid))
+            main_rows = list(main_result)
+
             self.query_count += 1
-            logger.info("Query #%d executed successfully, returned %d rows", self.query_count, len(rows))
-            if rows:
-                logger.info("Row sample: %s, %s", rows[0].id, rows[0].ssn)
+            logger.info(f"Query #{self.query_count} bucket={b} id={rid} -> {len(main_rows)} rows")
+            
+            if main_rows:
+                row = main_rows[0]
+                logger.info(f"Sample: id={row.id}, ssn={row.ssn}, balance={row.balance}")
             else:
-                logger.info("Row sample: No rows returned")
+                logger.info("No rows returned from main table")
+            
             return True
+            
         except Exception as e:
             self.error_count += 1
             logger.error(f"Query #{self.query_count + 1} failed: {e}")
@@ -153,6 +165,9 @@ class TableQueryRunner:
             logger.info("Database connection closed")
 
 def main():
+    if num_buckets < 1:
+        logger.error("--buckets must be >= 1")
+        sys.exit(1)
     runner = TableQueryRunner(hosts, keyspace, table, username, password)
     try:
         runner.run_for_duration(duration_minutes=opts.minutes,

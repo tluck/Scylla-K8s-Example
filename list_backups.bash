@@ -18,4 +18,4 @@ kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-m
 printf "\nListing the backup tasks for cluster: ${clusterNamespace}/${clusterName} to ${location}\n"
 kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool tasks -c ${clusterNamespace}/${clusterName} -t backup  --show-properties 
 printf "\nListing the backup info for cluster: ${clusterNamespace}/${clusterName} to ${location}\n"
-kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup list -c ${clusterNamespace}/${clusterName}
+kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup list -c ${clusterNamespace}/${clusterName} -L ${location}
