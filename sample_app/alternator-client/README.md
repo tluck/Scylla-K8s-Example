@@ -1,127 +1,80 @@
-# Alternator - Client-side load balancing - Python
+# Alternator client — Python utilities
 
-## Introduction
-As explained in the [toplevel README](../README.md), DynamoDB applications
-are usually aware of a _single endpoint_, a single URL to which they
-connect - e.g., `http://dynamodb.us-east-1.amazonaws.com`. But Alternator
-is distributed over a cluster of nodes and we would like the application to
-send requests to all these nodes - not just to one. This is important for two
-reasons: **high availability** (the failure of a single Alternator node should
-not prevent the client from proceeding) and **load balancing** over all
-Alternator nodes.
+This directory contains small **load generators**, **CQL helpers**, and **encoding utilities** for [ScyllaDB Alternator](https://opensource.docs.scylladb.com/stable/alternator/alternator.html) (DynamoDB-compatible API) and native CQL. They assume a Kubernetes-style default host (`scylla-client.scylla-dc1.svc` or `scylla-client`); override with `-s` / CLI args where supported.
 
-One of the ways to do this is to provide a modified library, which will
-allow a mostly-unmodified application which is only aware of one
-"endpoint URL" to send its requests to many different Alternator nodes.
+## Dependencies
 
-Our intention is _not_ to fork the existing AWS client library for Python -
-**boto3**. Rather, our intention is to provide a small library which tacks
-on to any version of boto3 that the application is already using, and makes
-boto3 do the right thing for Alternator.
+Install from `requirements.txt` (notably `boto3` / `botocore`, `scylla-driver`, and the `alternator-client` package that provides `alternator.AlternatorConfig`, `AlternatorClient`, `create_resource`, etc.).
 
-## The `alternator_lb` library
-Use `import alternator_lb` to make any boto3 client use Alternator cluster balancing load between nodes.
-This library periodically syncs list of active nodes with the cluster.
+TLS-enabled CQL paths expect certificate material under `./config/` (`ca.crt`, `tls.crt`, `tls.key`) when using port `9142`.
 
-## Using the library
+---
 
-### Create new dynamodb botocore client
+## Scripts
 
-```python
-from alternator_lb import AlternatorLB, Config
+### `alternator-faker.py`
 
-lb = AlternatorLB(Config(nodes=['x.x.x.x'], port=9999))
-dynamodb = lb.new_botocore_dynamodb_client()
+**Alternator API-only** workload: creates the DynamoDB table `userid`, bulk-inserts synthetic users via the high-level `AlternatorResource` / `Table.put_item`, then scans a few rows for verification.
 
-dynamodb.delete_table(TableName="SomeTable")
-```
+- **Table**: `userid` with optional composite key `UserID` (hash) + `LastUpdated` (range) when `-r` / `--range` is set; otherwise hash-only `UserID`.
+- **Items**: `UserID` (string `user{n}`), `LastUpdated` (ms timestamp), `Name`, `Score`.
+- **Batching**: Generates users in memory in chunks of 1000; each item is written with `put_item` (not DynamoDB `BatchWriteItem`).
+- **Flags**: `-s` hosts (comma-separated), `-d` delete table first, `-i` first user id, `-n` number of inserts, `-c` conditional `put_item` (`attribute_not_exists` / `LastUpdated` check), `-r` range key schema.
 
-### Create new dynamodb boto3 client
+Default Alternator endpoint: port **8000**, HTTP, `max_pool_connections=10`.
 
-```python
-from alternator_lb import AlternatorLB, Config
+---
 
-lb = AlternatorLB(Config(nodes=['x.x.x.x'], port=9999))
-dynamodb = lb.new_boto3_dynamodb_client()
+### `cql-faker.py`
 
-dynamodb.delete_table(TableName="SomeTable")
-```
+**Native CQL** load generator (no Alternator HTTP): creates keyspace `cql_userid` (configurable) and table `userid(userid text PRIMARY KEY, attrs map<text, text>)`, then inserts rows with `INSERT ... USING TIMESTAMP`.
 
-### Rack and Datacenter awareness
+- **Values**: Plain strings in the `attrs` map (`Name`, `Score`, `LastUpdated` as text).
+- **Flags**: `-s` hosts (optional `host:port`; default port 9042), `-u` / `-p`, `-d` drop table, `-k` keyspace, `-i` / `-n`, `-t` fixed timestamp (ms), `--skew`, `--dc` for `TokenAwarePolicy` + `DCAwareRoundRobinPolicy`.
+- **Verification**: Reads first 10 userids with prepared `SELECT`.
 
-You can make it target nodes of particular datacenter or rack, as such:
-```python
-    lb = alternator_lb.AlternatorLB(['x.x.x.x'], port=9999, datacenter='dc1', rack='rack1')
-```
+Use this to compare raw CQL throughput/schema against Alternator-backed tables.
 
-You can also check if cluster knows datacenter and/or rack you are targeting:
-```python
-    try:
-        lb.check_if_rack_and_datacenter_set_correctly()
-    except ValueError:
-        raise RuntimeError("Not supported")
-```
+---
 
-This feature requires server support, you can check if server supports this feature:
-```python
-    try:
-        supported = lb.check_if_rack_datacenter_feature_is_supported()
-    except RuntimeError:
-        raise RuntimeError("failed to check")
-```
+### `cql-alternator-faker.py`
 
-## Connection Pooling and Reuse
+**Hybrid**: creates the **`userid` table via the Alternator API** (same style as `alternator-faker.py` — hash key `UserID`, `system:write_isolation` tag), then **inserts data with CQL** into keyspace **`alternator_userid`** using Alternator’s internal layout: column `":attrs"` as a map of **binary blobs** encoded like DynamoDB attribute values.
 
-### How it works by default
+- Embeds `encode_alternator_blob()` for strings (`0x00` + UTF-8) and numbers (`0x03` header + 7-byte little-endian payload ordered for the driver).
+- **CQL**: `INSERT INTO userid ("UserID", ":attrs") VALUES (?, ?) USING TIMESTAMP ?`
+- **Flags**: `-s`, `-u`, `-p`, `-d`, `-k` (default `alternator_userid`), `-i`, `-n`, `-t`, `--skew`, `--dc`. Supports optional TLS on port `9142` and `username=mtls` for client-cert-only auth (no `PlainTextAuthProvider`).
+- **Verification**: Alternator resource `scan` (default limit 10).
 
-The `alternator_lb` library implements connection pooling to ensure HTTP/HTTPS connections are reused efficiently, minimizing the overhead of establishing new connections to the server. This is critical for performance and reduces the load on the Alternator cluster.
+Use when you want the table definition to go through Alternator but bulk load through the CQL port.
 
-**Connection reuse is enabled by default** with the following configuration:
-- **Default pool size**: 10 connections per cluster
-- **Connection timeout**: 3600 seconds (1 hour)
-- **TCP keepalive**: Enabled when connection pooling is active
+---
 
-The library uses `urllib3` connection pools under the hood, which automatically manages connection reuse. When you make multiple requests to the same node, the underlying connection is reused rather than creating a new one each time.
+### `cleanup_userid_mt.py`
 
-### How many connections can be reused?
+**Maintenance** on the Alternator backing table in CQL: keyspace `alternator_userid`, table `userid`. For each `UserID` seen in parallel **token ranges**, keeps only the row with the **maximum `LastUpdated`** and deletes older rows (`DELETE ... WHERE "UserID" = ? AND "LastUpdated" < ?`).
 
-By default, the library maintains a pool of **10 connections per cluster**. This means:
-- Up to 10 concurrent connections can be kept alive and reused
-- Idle connections are kept alive for the duration of the connection timeout
+- **Flags**: `-s` host (single contact point in current code), `-u`, `-p`, `--batch_size`, `--token-step`, `--parallelism`.
+- Uses a `ThreadPoolExecutor`; each worker opens its own session.
 
-### Configuring connection pool size
+---
 
-You can increase (or decrease) the maximum number of pooled connections by setting the `max_pool_connections` parameter:
+### `decode_alternator.py`
 
-```python
-from alternator_lb import AlternatorLB, Config
+**Read-only inspection** of one Alternator row over CQL: connects to `alternator_userid`, loads `userid` by `-q` / `--query` UserID, prints raw `":attrs"` bytes (hex) and **decoded** values using the same blob rules as `encode_alternator.py` (string vs numeric type tags).
 
-lb = AlternatorLB(Config(
-    nodes=['x.x.x.x'],
-    port=9999,
-    max_pool_connections=50
-))
-dynamodb = lb.new_boto3_dynamodb_client()
-```
+---
 
-**When to increase pool size:**
-- High-concurrency applications making many parallel requests
-- Applications with multiple threads/workers accessing DynamoDB
-- Workloads with sustained high request rates
+### `encode_alternator.py`
 
-### Connection timeout
+**Small encoding demo**: hardcoded cluster contact point `scylla-client:9042` / `cassandra` credentials, keyspace `alternator_userid`. Inserts a single row with `encode_alternator_blob` for sample `Name` / `Score`, then selects and prints decoded fields. Useful to verify blob layout end-to-end; for flexible hosts, use `decode_alternator.py` or copy the encode/decode helpers.
 
-You can also configure how long idle connections remain open:
+---
 
-```python
-lb = AlternatorLB(Config(
-    nodes=['x.x.x.x'],
-    port=9999,
-    max_pool_connections=50,
-    connect_timeout=7200  # 2 hours in seconds
-))
-```
+## Related
 
-## Examples
+- **`loop_n_faker.bash`**: Optional wrapper that sources `env` if present, can init with `alternator-faker.py -d`, then runs multiple parallel `cql-faker.py` instances with disjoint user id ranges (default 1M rows each). Commented lines show `alternator-faker.py` / `cql-alternator-faker.py` variants.
 
-Find more examples in `alternator_lb_tests.py`
+- **`.github/workflows/python-tests.yml`**: CI for this sample (if present in your checkout).
+
+For broader context on client-side load balancing against many Alternator nodes, see the sample app documentation elsewhere in the repo (the older `alternator_lb`-focused README text referred to a separate library and tests, not the scripts listed above).

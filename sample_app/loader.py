@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--hosts', default="127.0.0.1:9042", help='Comma-separated ScyllaDB node Names or IPs')
-    parser.add_argument('-l', '--loopback', action="store_true", help='Use loopback interface')
+    parser.add_argument('-l', '--local_only', action="store_true", help='Use local-only mode')
     parser.add_argument('-m', '--mtls', action="store_true", help='Use mtls for authentication (overrides username/password)')
     parser.add_argument('-e', '--tls', action="store_true", help='Use tls for connection with username/password)')
     parser.add_argument('-u', '--username', default="cassandra", help='ScyllaDB username')
@@ -112,11 +112,11 @@ def _init_worker_rng(worker_index):
     random.seed(seed)
     Faker.seed(seed)
 
-def _build_cluster_and_session(hosts, port, username, password, dc, loopback):
-    local_loopback = (hosts and hosts[0] in ('127.0.0.1', 'localhost')) or loopback
+def _build_cluster_and_session(hosts, port, username, password, dc, local_only):
+    is_local_only = (hosts and hosts[0] in ('127.0.0.1', 'localhost')) or local_only
 
-    if local_loopback:
-        logging.info("Local loopback: HostFilterPolicy + no discovery")
+    if is_local_only:
+        logging.info("Local-only mode: HostFilterPolicy + no discovery")
         policy = HostFilterPolicy(
             child_policy=RoundRobinPolicy(),
             predicate=lambda host: host.address == hosts[0]
@@ -130,6 +130,7 @@ def _build_cluster_and_session(hosts, port, username, password, dc, loopback):
         pv = 3
         md = False
     else:
+        logging.info(f"Using TokenAwarePolicy with local_dc: {dc}")
         policy = TokenAwarePolicy(DCAwareRoundRobinPolicy(local_dc=dc))
         profile = ExecutionProfile(
             load_balancing_policy=policy,
@@ -173,7 +174,7 @@ def _build_cluster_and_session(hosts, port, username, password, dc, loopback):
         common_kwargs['auth_provider'] = PlainTextAuthProvider(username=username, password=password)
         cluster = Cluster(**common_kwargs)
 
-    logging.info(f"Connecting: hosts={hosts}, port={port}, auth={username}, loopback={local_loopback}")
+    logging.info(f"Connecting: hosts={hosts}, port={port}, auth={username}, local_only={is_local_only}")
     session = cluster.connect()
     logging.info("Session created successfully")
     return cluster, session
@@ -188,7 +189,7 @@ def _worker_insert_range(
     keyspace,
     table,
     dc,
-    loopback,
+    local_only,
     consistency_level,
     start_id,
     end_id,
@@ -199,7 +200,7 @@ def _worker_insert_range(
     # Per-process RNG
     _init_worker_rng(worker_index)
     fake = Faker()
-    cluster, session = _build_cluster_and_session(hosts, port, username, password, dc, loopback)
+    cluster, session = _build_cluster_and_session(hosts, port, username, password, dc, local_only)
     try:
         # Prepare statement per worker
         cql = f"""INSERT INTO {keyspace}.{table} (bucket, id, ssn, imei, os, phonenum, balance, pdate, message) VALUES (?,?,?,?,?,?,?,?, ?)"""
@@ -239,7 +240,7 @@ def insert_data_parallel(
     tablets,
     compression,
     dc,
-    loopback,
+    local_only,
     consistency_level,
     row_count,
     batch_size,
@@ -248,7 +249,7 @@ def insert_data_parallel(
     num_buckets,
 ):
     # One control session in parent to create schema (safe and simple)
-    ctrl_cluster, ctrl_session = _build_cluster_and_session(hosts, port, username, password, dc, loopback)
+    ctrl_cluster, ctrl_session = _build_cluster_and_session(hosts, port, username, password, dc, local_only)
     try:
         create_schema(ctrl_session, keyspace, table, tablets, compression)
     finally:
@@ -290,7 +291,7 @@ def insert_data_parallel(
                     keyspace=keyspace,
                     table=table,
                     dc=dc,
-                    loopback=loopback,
+                    local_only=local_only,
                     consistency_level=consistency_level,
                     start_id=start_id,
                     end_id=end_id,
@@ -355,13 +356,13 @@ def main():
         logger.error("--buckets must be >= 1")
         sys.exit(1)
     logger.info(f"Workers: {opts.workers or cpu_count()}")
-    if opts.loopback:
-        logger.info(f"Force Loopback: {opts.loopback}")
+    if opts.local_only:
+        logger.info(f"Local-only mode forced: {opts.local_only}")
 
     try:
         if opts.drop:
             # Use ephemeral parent session to drop keyspace to avoid races
-            cluster, session = _build_cluster_and_session(hosts, port, username, opts.password, opts.dc, opts.loopback)
+            cluster, session = _build_cluster_and_session(hosts, port, username, opts.password, opts.dc, opts.local_only)
             try:
                 logger.info(f"Dropping table {opts.keyspace}.{opts.table} if exists.")
                 session.execute(f"DROP TABLE IF EXISTS {opts.keyspace}.{opts.table};")
@@ -386,7 +387,7 @@ def main():
             tablets=TABLETS,
             compression=COMPRESSION,
             dc=opts.dc,
-            loopback=opts.loopback,
+            local_only=opts.local_only,
             consistency_level=opts.cl,
             row_count=opts.row_count,
             batch_size=opts.batch_size,

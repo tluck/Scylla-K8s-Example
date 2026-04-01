@@ -21,16 +21,12 @@ parser.add_argument('-k', '--keyspace', default="mykeyspace", help='Keyspace nam
 parser.add_argument('-t', '--table', default="myTable", help='Table name')
 parser.add_argument('-r', '--row_count', type=int, action="store", dest="row_count", default=100000)
 parser.add_argument('-o', '--offset', type=int, default=0, help='ID offset (must match loader)')
-parser.add_argument(
-    '--buckets',
-    type=int,
-    default=256,
-    help='Partition bucket count (must match loader: id %% buckets)',
-)
+parser.add_argument('-l', '--local_only', action="store_true", help='Use local-only mode')
 parser.add_argument('--cl', dest="consistency_level", default="LOCAL_QUORUM", help="Consistency Level (ONE, TWO, QUORUM, ALL, LOCAL_QUORUM, EACH_QUORUM)")
 parser.add_argument('--dc', default='dc1', help='Local datacenter name for ScyllaDB')
 parser.add_argument('--minutes', type=int, default=60, help='How long to run (minutes)')
 parser.add_argument('--interval', type=float, default=1.0, help='Delay between queries (seconds)')
+parser.add_argument('--buckets', type=int, default=256, help='Partition bucket count (must match loader: id %% buckets)',)
 opts = parser.parse_args()
 
 hosts = [h.strip() for h in opts.hosts.split(',') if h.strip()]
@@ -66,22 +62,21 @@ class TableQueryRunner:
         self.query_count = 0
         self.error_count = 0
         try:
-            local_loopback = (hosts and hosts[0] in ('127.0.0.1', 'localhost'))
-            if local_loopback:
+            is_local_only = (hosts and hosts[0] in ('127.0.0.1', 'localhost')) or opts.local_only
+            if is_local_only:
                 # For a single node connection, shard-awareness should be disabled.
                 # This prevents the driver from trying to connect to other discovered nodes.
                 logger.info(f"Using WhiteListRoundRobinPolicy with hosts: {hosts}")
                 policy = WhiteListRoundRobinPolicy(hosts)
-                profile = ExecutionProfile(load_balancing_policy=policy, request_timeout=30)
-                # profile = ExecutionProfile(load_balancing_policy=DCAwareRoundRobinPolicy(local_dc=dc), request_timeout=30)
-                # disable_shard_aware = True
             else:
-                profile = ExecutionProfile(load_balancing_policy=TokenAwarePolicy(DCAwareRoundRobinPolicy(local_dc=dc)), request_timeout=30)
-                # disable_shard_aware = False
+                logger.info(f"Using TokenAwarePolicy with local_dc: {dc}")
+                policy = TokenAwarePolicy(DCAwareRoundRobinPolicy(local_dc=dc))
+
+            profile = ExecutionProfile(load_balancing_policy=policy, request_timeout=30)
                 
             self.cluster = Cluster(
                 contact_points= hosts,
-                shard_aware_options=dict(disable=local_loopback),
+                shard_aware_options=dict(disable=is_local_only),
                 auth_provider=PlainTextAuthProvider(username=username, password=password),
                 execution_profiles={EXEC_PROFILE_DEFAULT: profile},
                 protocol_version=4,

@@ -112,25 +112,6 @@ def main():
         start_time = time.time()
         total_inserted = 0
         
-        # for i in range(0, len(users), batch_size):
-        #     batch = users[i:i + batch_size]
-        #     request_items = [{"PutRequest": {"Item": item}} for item in batch]
-            
-        #     if args.conditional_check_enabled:
-        #         for req in request_items:
-        #             req["PutRequest"]["ConditionExpression"] = "attribute_not_exists(UserID)"
-            
-        #     try:
-        #         resp = table.batch_write_item(RequestItems={TABLE_NAME: request_items})
-        #         unprocessed = resp.get("UnprocessedItems", {}).get(TABLE_NAME, [])
-        #         total_inserted += len(batch) - len(unprocessed)
-        #     except Exception as e:
-        #         print(f"Batch {i//batch_size} error: {e}")
-            
-        #     if (i // batch_size) % 20 == 0:  # Progress every 500 items
-        #         elapsed = time.time() - start_time
-        #         rate = total_inserted / elapsed if elapsed else 0
-        #         print(f"Progress: {total_inserted:,}/{NUM_INSERTS:,} ({rate:,.0f}/sec)")
         for i in range(0, len(users), batch_size):
             batch = users[i:i + batch_size]
             now_ms = int(time.time() * 1000)
@@ -167,23 +148,6 @@ def main():
             print(f"  {item['UserID']} | {item['Name']} | Score:{item['Score']} | {item['LastUpdated']}ms")
     finally:
         close_resource(resource)
-
-    # print(f"\nRead test: {NUMREADS:,} random gets...")
-    # user_id_min, user_id_max = USER_ID_START, USER_ID_START + NUM_INSERTS - 1
-    # read_start = time.time()
-    
-    # with AlternatorClient(config) as client:
-    #     hits = 0
-    #     for _ in range(NUMREADS):
-    #         uid = f"user{random.randint(user_id_min, user_id_max)}"
-    #         try:
-    #             if client.get_item(TableName=TABLE_NAME, Key={"UserID": {"S": uid}})['Item']:
-    #                 hits += 1
-    #         except:
-    #             pass
-        
-    #     read_elapsed = time.time() - read_start
-    #     print(f"✅ {NUMREADS:,} reads ({hits:,} hits) in {read_elapsed:.2f}s ({NUMREADS/read_elapsed:,.0f}/sec)")
 
 if __name__ == "__main__":
     main()

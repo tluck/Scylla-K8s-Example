@@ -126,19 +126,20 @@ fi
 fi
 
 # wait
-kubectl -n scylla-operator wait deployment/scylla-operator --for=condition=Available=True --timeout=90s
-kubectl -n scylla-operator wait deployment/webhook-server  --for=condition=Available=True --timeout=90s
+# kubectl -n scylla-operator wait --for='condition=established' crd/scyllaclusters.scylla.scylladb.com crd/nodeconfigs.scylla.scylladb.com crd/scyllaoperatorconfigs.scylla.scylladb.com crd/scylladbmonitorings.scylla.scylladb.com
+kubectl -n scylla-operator rollout status --timeout=90s deployment/scylla-operator deployment/webhook-server
+# kubectl -n scylla-operator wait deployment/scylla-operator --for=condition=Available=True --timeout=90s
+# kubectl -n scylla-operator wait deployment/webhook-server  --for=condition=Available=True --timeout=90s
 
 sleep 5
 # update the scylla-operator config
 # printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${dbVersion}\n"
 
-# if [[ ${operatorTag} == "latest" || ${operatorTag} == *1.19* ]]; then
+if [[ ${operatorTag} == "latest" || ${operatorTag} == *1.20* ]]; then
   utilsImage=${dbVersion}
   # [[ ${context} == *eks* ]] && utilsImage="2025.1.9" # because of the EKS 1.19 image bug
-# else
-  # utilsImage="2025.1.9"
-# fi
+else
+  utilsImage="2026.1.0" #"2025.1.9"
 
 # the 2025.2.x and 2025.3.x images have a bug that prevents the scylla-operator from working properly
 printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${utilsImage}\n"
@@ -150,6 +151,7 @@ metadata:
 spec:
   scyllaUtilsImage: docker.io/scylladb/scylla:${utilsImage}
 EOF
+fi
 
 # Install the storageclass scylladb-local-xfs
 if [[ ${context} == *docker* ]]; then
@@ -176,8 +178,6 @@ printf "Applying the scylla nodeconfig\n"
 
 cat local-csi-driver/nodeconfigTemplate.yaml | sed \
   -e "s|#AWS |${eks}|g" \
-  -e "s|#v19 |${v19}|g" \
-  -e "s|#v18 |${v18}|g" \
   > local-csi-driver/nodeconfig.yaml
 kubectl -n scylla-operator apply --server-side -f local-csi-driver/nodeconfig.yaml
 # Wait for NodeConfig to apply changes to the Kubernetes nodes.

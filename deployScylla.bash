@@ -22,13 +22,14 @@ if [[ ${options} == '-d' || ${options} == '-x' ]]; then
   fi
     kubectl -n ${clusterNamespace} delete -f ${clusterNamespace}-${clusterName}.ScyllaDBMonitoring.yaml || true
     kubectl -n ${clusterNamespace} delete Prometheus/prometheus || true
-    kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-server-certs || true
-    kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-client-certs || true
-    kubectl -n ${clusterNamespace} delete Issuer/${clusterName}-server-issuer || true
-    kubectl                        delete ClusterIssuer/${clusterName}-client-issuer || true
 
   # remove the rest of the resources such PCVs, PVs and namespaces
   if [[ ${options} == '-x' ]]; then
+    kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-server-certs || true
+    kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-client-certs || true
+    kubectl                        delete ClusterIssuer/${clusterName}-client-issuer || true
+    kubectl -n ${clusterNamespace} delete Issuer/${clusterName}-server-issuer || true
+
     kubectl -n ${clusterNamespace} patch  $( kubectl -n ${clusterNamespace} get ScyllaDBManagerTask -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
     kubectl -n ${clusterNamespace} patch  $( kubectl -n ${clusterNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
     kubectl -n ${scyllaManagerNamespace} patch  $( kubectl -n ${scyllaManagerNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
@@ -348,7 +349,6 @@ cat ${templateFile} | sed \
     -e "s|ZONE1|${ZONE1}|g" \
     -e "s|ZONE2|${ZONE2}|g" \
     -e "s|ZONE3|${ZONE3}|g" \
-    -e "s|#v19 |${v19}|g" \
     -e "s|#DEV |${dev}|g" \
     -e "s|#CTorG |${CTorG}|g" \
     -e "s|#CERTS |${certs}|g" \
@@ -712,7 +712,6 @@ cat ${templateFile} | sed \
     -e "s|MANAGERDBMEMORYLIMIT|${managerDbMemoryLimit}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     -e "s|NODESELECTOR|${nodeSelector0}|g" \
-    -e "s|#v19 |${v19}|g" \
     -e "s|#DEV |${dev}|g" \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|#CUSTC |${certAuth}|g" \
@@ -780,7 +779,7 @@ roleRef:
 EOF
   
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
-# open up ports for granfana and scylla client for non-tls and tls and minio
+# open up ports for Grafana, Scylla client (non-TLS and TLS), and MinIO
 kubectl -n ${clusterNamespace} wait deployment/${clusterName}-grafana  --for=condition=Available=True --timeout=90s
  
 [[ ${dataCenterName} == 'dc1' ]] && ./port_forward.bash

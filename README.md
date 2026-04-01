@@ -50,22 +50,23 @@ Run from the `k8s` directory (same directory as `init.conf`).
 3. **cert-manager** — Installs via Helm into `cert-manager` if not already present, with node selectors from `init.conf`.
 4. **kube-prometheus-stack** — Installs as `monitoring` in `scyllaMonitoringNamespace` (from `init.conf`), then **removes** the chart’s default Grafana deployment so Scylla’s own monitoring stack can own Grafana.
 5. **Scylla Operator** — Either:
-   - **Helm** (`helmEnabled=true`): renders `templateOperator.yaml` to `scylla-operator.yaml` and `helm install`s, or  
-   - **kubectl** (`helmEnabled=false`): applies `operator.yaml` from the Scylla Operator GitHub release matching `operatorTag`.
+  - **Helm** (`helmEnabled=true`): renders `templateOperator.yaml` to `scylla-operator.yaml` and `helm install`s, or  
+  - **kubectl** (`helmEnabled=false`): applies `operator.yaml` from the Scylla Operator GitHub release matching `operatorTag`.
 6. **Waits** — For `scylla-operator` and `webhook-server` deployments to become available.
 7. **ScyllaOperatorConfig** — Applies a `ScyllaOperatorConfig` named `cluster` setting `scyllaUtilsImage` to `docker.io/scylladb/scylla:${dbVersion}` (aligned with your DB image tag).
 8. **Local storage for Scylla**
-   - **Docker / local:** Creates `StorageClass` `scylladb-local-xfs` using `rancher.io/local-path`.
-   - **Cloud (non-Docker):** Renders `local-csi-driver/nodeconfig.yaml` from `nodeconfigTemplate.yaml` (EKS vs non-EKS), applies NodeConfig, applies the local CSI driver manifest set under `local-csi-driver/`, waits for the driver DaemonSet.
-
+  - **Docker / local:** Creates `StorageClass` `scylladb-local-xfs` using `rancher.io/local-path`.
+  - **Cloud (non-Docker):** Renders `local-csi-driver/nodeconfig.yaml` from `nodeconfigTemplate.yaml` (EKS vs non-EKS), applies NodeConfig, applies the local CSI driver manifest set under `local-csi-driver/`, waits for the driver DaemonSet.
 9. **MinIO** — If `minioEnabled=true`, runs `./deployMinio.bash`.
 
 ### Teardown flags
 
-| Flag | Behavior |
-|------|----------|
+
+| Flag     | Behavior                                                                                                                                                                                                                                                    |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`-d`** | Deletes NodeConfigs, namespaces `local-csi-driver` and `scylla-operator-node-tuning`, uninstalls Helm releases: `monitoring`, `cert-manager`, `scylla-operator`. Optionally uninstalls MinIO if enabled. Does **not** remove namespaces or CRDs by default. |
-| **`-x`** | Same as **`-d`**, plus deletes monitoring / cert-manager / scylla-operator namespaces and CRDs matching `scylla`, `cert-manager`, and `coreos` (Prometheus operator CRDs). |
+| **`-x`** | Same as **`-d`**, plus deletes monitoring / cert-manager / scylla-operator namespaces and CRDs matching `scylla`, `cert-manager`, and `coreos` (Prometheus operator CRDs).                                                                                  |
+
 
 **Note:** Script filename is **`setUpK8s.bash`** (capital **U**), not `SetupK8s.bash` or `setupK8s.bash`.
 
@@ -77,11 +78,13 @@ Run from the `k8s` directory after `setUpK8s.bash` has created the `scylladb-loc
 
 ### Flags
 
-| Flag | Behavior |
-|------|----------|
+
+| Flag     | Behavior                                                                                                                                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`-c`** | **Cluster only** — Deploys the Scylla cluster (and related cert/config setup), waits for it, then runs `./port_forward.bash` when `dataCenterName` is `dc1`, and **exits** without ScyllaDB Monitoring or Scylla Manager. |
-| **`-d`** | Removes Scylla cluster, manager, monitoring CRs, certificates, and issuers for the namespaces in `init.conf`. Leaves PVCs unless **`-x`**. |
-| **`-x`** | Same as **`-d`**, plus patches finalizers, deletes PVCs/PVs for the cluster and manager namespaces, and deletes those namespaces. |
+| **`-d`** | Removes Scylla cluster, manager, monitoring CRs, certificates, and issuers for the namespaces in `init.conf`. Leaves PVCs unless **`-x`**.                                                                                |
+| **`-x`** | Same as **`-d`**, plus patches finalizers, deletes PVCs/PVs for the cluster and manager namespaces, and deletes those namespaces.                                                                                         |
+
 
 ### Normal deploy flow (no teardown flags)
 
@@ -93,7 +96,7 @@ Run from the `k8s` directory after `setUpK8s.bash` has created the `scylladb-loc
 6. **ScyllaCluster** — Renders `templateClusterHelm.yaml` or `templateCluster.yaml` to a namespaced YAML and applies via Helm or `kubectl`. Supports multi-DC via `externalSeeds` when not `dc1`.
 7. **GKE** — If `gcs-service-account.json` exists and context matches `*gke*`, annotates the member service account for Workload Identity.
 8. **Wait and patch** — Waits for `ScyllaCluster` to be Available; patches `${clusterName}-client` to expose port **10000** (REST API) if missing.
-9. **If `-c`** — Port-forward for `dc1` only, then stop.
+9. With **`-c`** — Port-forward for `dc1` only, then stop.
 10. **ScyllaDB Monitoring** — Applies `templateDBMonitoring.yaml` output; creates Prometheus RBAC and `Prometheus` CR; patches Grafana ConfigMaps (default dashboard, scrape interval), patches Grafana deployment dashboard mounts, restarts ReplicaSets as needed; prints Grafana admin credentials from the secret.
 11. **Scylla Manager** — Renders manager template (Helm or kubectl); optional manager TLS certificate when `customCerts`; applies and waits for `scylla-manager` deployment.
 12. **RBAC** — Applies pod watch Role/RoleBindings for Scylla member and manager service accounts.
@@ -114,8 +117,9 @@ Port-forward details and local hostnames are handled in `port_forward.bash` when
 
 ## Backup
 
-- Create backups with `./create_backup.bash`, or use `sctool` on the manager pod.
-- For native S3-style flows, see `./create_backup.bash -n` where applicable.
+- Create backups with **`./create_backup.bash`**, or use `sctool` on the manager pod.
+- Pass **`-n`** to use Manager’s **native** backup method (see the script for details).
+- List backup tasks and stored backups with **`./list_backups.bash`** (same `init.conf` / bucket context as `create_backup.bash`).
 
 Example manager commands (adjust cluster name and namespace to match `init.conf`):
 
@@ -134,10 +138,25 @@ For GKE backups to GCS, provide `gcs-service-account.json` and configure buckets
 
 Under `sample_app/` you can build images and deploy workloads with scripts such as:
 
-- `_deploy_python-apps_k8s.bash` / `_deploy_java-apps_k8s.bash` — deploy sample apps to the cluster.
-- `run_app_k8s.bash` — run a Python script or `cqlsh` against the cluster from a configured environment.
+- **`_deploy_python-apps_k8s.bash`** / **`_deploy_java-apps_k8s.bash`** — deploy sample apps to the cluster.
+- **`run_app_k8s.bash`** — run a Python script or `cqlsh` against the cluster from a configured environment.
+- **`build_python_docker_image.bash`** / **`build_java_docker_image.bash`** — build the sample container images before deploy.
 
-Use `kubectl exec` into the application pod as needed. Loader/query scripts in the directory (for example `loader.py`, `query.py`) can be run per those scripts’ usage.
+Top-level Python examples in `sample_app/` include **`loader.py`**, **`query.py`**, **`slow_loader.py`**, **`test_compression.py`**, **`tombstone.py`**, and **`proxy.py`** (see each file’s usage).
+
+Subdirectories (each may have its own README, Makefile, or `run_it.bash`):
+
+
+| Path                          | Role                                                                                                                                                                             |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`alternator-client/`**      | Python Alternator and CQL load generators, blob encode/decode helpers, cleanup utility — see [sample_app/alternator-client/README.md](sample_app/alternator-client/README.md). |
+| **`alternator-boto3/`**       | boto3-oriented Alternator scripts (table create, ingest, query) and cert helper.                                                                                                 |
+| **`alternator-java-ingest/`** | Java Alternator ingest sample (Maven, Docker).                                                                                                                                   |
+| **`cql-java-ingest/`**        | Java CQL ingest sample and comparison helper scripts.                                                                                                                            |
+| **`alternator-to-cql/`**      | Java library and integration tests for Alternator-to-CQL style writes.                                                                                                           |
+
+
+Use `kubectl exec` into the application pod as needed. For TLS material from the cluster into a sample app, see `sample_app/get_certs_k8s.bash`.
 
 ---
 
@@ -153,13 +172,13 @@ Use `kubectl exec` into the application pod as needed. Loader/query scripts in t
 
 These are worth knowing when navigating the tree:
 
-| Topic | Note |
-|--------|------|
-| **Script name** | Use **`setUpK8s.bash`** exactly; other spellings appear in older comments or docs. |
-| **Step symlinks** | README historically referenced `./_step_1` / `./_step_2`; they may not exist in every checkout — call `setUpK8s.bash` and `deployScylla.bash` directly. |
-| **Parallel trees** | `makeK8s_EKS/` and `test_EKS/` contain similar Terraform/helper scripts; keep changes in sync if you maintain both. |
-| **`sample_app` VCS** | Nested `.git` directories under `sample_app` may appear; treat as optional submodules or vendored trees. |
-| **Typos in messages** | Prefer grep for `Granfana` / `setupK8s` if you add new scripts — some older strings may still use those variants. |
+
+| Topic                | Note                                                                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Step symlinks**    | README historically referenced `./_step_1` / `./_step_2`; they may not exist in every checkout — call `setUpK8s.bash` and `deployScylla.bash` directly. |
+| **Parallel trees**   | `makeK8s_EKS/` and `test_EKS/` contain similar Terraform/helper scripts; keep changes in sync if you maintain both.                                     |
+| **sample_app VCS**   | Nested `.git` directories under `sample_app` may appear; treat as optional submodules or vendored trees.                                                |
+
 
 ---
 

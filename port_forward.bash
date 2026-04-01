@@ -131,7 +131,7 @@ if [[ ! -z ${username} ]]; then
   # Check if the exact line exists (flexible whitespace matching)
   if ! grep -q "^127\.0\.0\.1\s\+${clusterName}-client" /etc/hosts; then
     printf "Adding ScyllaDB entries to /etc/hosts...\n"
-    names="${clusterName}-client ${clusterName}-client-headless ${clusterName}-grafana ${clusterName}-client.${clusterNamespace}.svc ${clusterName}-client-external.${clusterNamespace}.svc"
+    names="${clusterName}-client ${clusterName}-client-headless ${clusterName}-grafana ${clusterName}-client.${clusterNamespace}.svc"
     echo "127.0.0.1 ${names}" | sudo tee -a /etc/hosts > /dev/null
     printf "✓ Added: 127.0.0.1 ${names}\n"
   else
