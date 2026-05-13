@@ -22,23 +22,29 @@ if [[ ${options} == '-d' || ${options} == '-x' ]]; then
   fi
     kubectl -n ${clusterNamespace} delete -f ${clusterNamespace}-${clusterName}.ScyllaDBMonitoring.yaml || true
     kubectl -n ${clusterNamespace} delete Prometheus/prometheus || true
+    kubectl -n ${clusterNamespace} delete secret/${clusterName}-server-certs || true
+    kubectl -n ${clusterNamespace} delete secret/${clusterName}-client-certs || true
+    kubectl -n ${scyllaManagerNamespace} delete secret/scylla-manager-certs || true
+    kubectl -n ${scyllaManagerNamespace} delete secret/${clusterName}-client-certs || true
+    kubectl -n ${clusterNamespace} delete secret/${clusterName}-agent-config-secret || true
+    kubectl -n ${clusterNamespace} delete secret/${clusterName}-server-issuer-secret || true
 
   # remove the rest of the resources such PCVs, PVs and namespaces
   if [[ ${options} == '-x' ]]; then
     kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-server-certs || true
     kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-client-certs || true
-    kubectl                        delete ClusterIssuer/${clusterName}-client-issuer || true
-    kubectl -n ${clusterNamespace} delete Issuer/${clusterName}-server-issuer || true
+    # kubectl                        delete ClusterIssuer/${clusterName}-client-issuer || true
+    kubectl -n ${clusterNamespace} delete ClusterIssuer/${clusterName}-server-issuer || true
 
     kubectl -n ${clusterNamespace} patch  $( kubectl -n ${clusterNamespace} get ScyllaDBManagerTask -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
     kubectl -n ${clusterNamespace} patch  $( kubectl -n ${clusterNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
     kubectl -n ${scyllaManagerNamespace} patch  $( kubectl -n ${scyllaManagerNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
 
     kubectl -n ${clusterNamespace} delete $( kubectl -n ${clusterNamespace} get pvc -o name| grep ${clusterName} | grep -v scylla-manager |grep -v prometheus ) || true
-    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.storageClassName=="scylladb-local-xfs" and .spec.claimRef.namespace == $ns) | .metadata.name') || true
-    kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name | grep manager) || true
-    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaManagerNamespace} '.items[] | select(.spec.claimRef.namespace == $ns) | .metadata.name' ) || true
     kubectl -n ${clusterNamespace} delete $( kubectl -n ${clusterNamespace} get pvc -o name | grep prometheus) || true
+    kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name | grep manager) || true
+    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.storageClassName=="scylladb-local-xfs" and .spec.claimRef.namespace == $ns) | .metadata.name') || true
+    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaManagerNamespace} '.items[] | select(.spec.claimRef.namespace == $ns) | .metadata.name' ) || true
     kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.claimRef.namespace == $ns ) | .metadata.name' ) || true
     kubectl delete ns ${clusterNamespace} || true
     kubectl delete ns ${scyllaManagerNamespace} || true
@@ -148,9 +154,9 @@ if [[ ${customCerts} == true ]]; then
   printf "Using custom certificates for Scylla nodes\n"
   ## method to create proper certs with a subject.
   issuerName="${clusterName}-server-issuer"
-  issuer=$( kubectl -n ${clusterNamespace} get Issuer/${issuerName} 2>/dev/null )
+  issuer=$( kubectl -n ${clusterNamespace} get ClusterIssuer/${issuerName} 2>/dev/null )
   if [[ -n "${issuer}" ]]; then
-    printf "%s\n" "Issuer/${issuerName} already exists"
+    printf "%s\n" "ClusterIssuer/${issuerName} already exists"
   else
     printf "Creating a cert-manager to generate server certificates for Scylla ...\n"
   # Create an issuer from the CA secret
@@ -161,31 +167,31 @@ if [[ ${customCerts} == true ]]; then
       kubectl -n cert-manager get secret cert-manager-webhook-ca -o jsonpath="{.data['tls\.crt']}" | base64 -d > tls/server/tls.crt
       kubectl -n cert-manager get secret cert-manager-webhook-ca -o jsonpath="{.data['tls\.key']}" | base64 -d > tls/server/tls.key
     fi
-    kubectl -n ${clusterNamespace} delete secret ${issuerName}-secret > /dev/null 2>&1 || true
-    kubectl -n ${clusterNamespace} create secret generic ${issuerName}-secret \
+    kubectl -n cert-manager delete secret ${issuerName}-secret > /dev/null 2>&1 || true
+    kubectl -n cert-manager create secret generic ${issuerName}-secret \
       --from-file=tls.crt=tls/server/tls.crt \
       --from-file=tls.key=tls/server/tls.key \
       --from-file=ca.crt=tls/server/ca.crt \
       -o yaml --dry-run=client | kubectl apply -f -
 cat <<EOF | kubectl apply -f - #> /dev/null 2>&1
 apiVersion: cert-manager.io/v1
-kind: Issuer
+kind: ClusterIssuer
 metadata:
   name: ${issuerName}
-  namespace: ${clusterNamespace}
+  # namespace: ${clusterNamespace}
 spec:
   ca:
     secretName: ${issuerName}-secret #cert-manager-webhook-ca #ca-key-pair
 EOF
   printf "Waiting for Issuer to become ready...\n"
-  if ! kubectl wait --for=condition=Ready "issuer/${issuerName}" -n "${clusterNamespace}" --timeout=120s; then
+  if ! kubectl wait --for=condition=Ready "ClusterIssuer/${issuerName}" -n "${clusterNamespace}" --timeout=120s; then
       printf "%s\n" "* * * Error - Timed out waiting for Cert Issuer to become ready"
       exit 1
   fi
   printf "... Done.\n"
   fi # end of else
 
-  printf "Creating the server certificates\n"
+  printf "Creating the server certificates: ${clusterName}-server-certs with issuer: ${issuerName}\n"
   # make certs for Scylla using the new cert-manager
   # note: the first DNS name is the commonName for role mapping, the rest are SANs
   issuerName="${clusterName}-server-issuer"
@@ -203,6 +209,10 @@ spec:
   renewBefore: 360h # Renew before expiry (15 days).
   commonName: cassandra
   dnsNames:
+    - cassandra
+    - admin
+    - scylla-client.${clusterNamespace}.svc
+    - scylla-client-headless.${clusterNamespace}.svc
     - ${clusterName}-${dataCenterName1}-rack1-0.${clusterNamespace}.svc
     - ${clusterName}-${dataCenterName1}-rack2-0.${clusterNamespace}.svc
     - ${clusterName}-${dataCenterName1}-rack3-0.${clusterNamespace}.svc
@@ -211,12 +221,13 @@ spec:
     - ${clusterName}-${dataCenterName2}-rack3-0.${clusterNamespace}.svc
   issuerRef:
     name: ${issuerName}
-    kind: Issuer        # or ClusterIssuer, depending on what you created
+    kind: ClusterIssuer
     group: cert-manager.io
   usages:
     - "digital signature"    # Required for TLS handshake
     - "key encipherment"     # Required for key exchange
     - "server auth"
+    - "client auth"
 EOF
 fi # end of customCerts
 
@@ -388,51 +399,12 @@ kubectl -n ${clusterNamespace} get pods \
   ${clusterName}-${dataCenterName}-rack3-0 -o json \
   | jq -r '.items[] | "\t\(.metadata.name)\t\(.status.podIP)"'
 
-# create client certificates using cert-manager
-issuerName="${clusterName}-client-issuer"
-# make the issuer for client certs
+# # create client certificates using cert-manager - this is needed to create a proper cert with SN with a CN
 if [[ ${customCerts} == true || ${mTLS} == true ]]; then
-  printf "Using custom certificates for Scylla clients: Issuer/${issuerName}\n"
-  kubectl -n ${clusterNamespace} get Issuer/${issuerName} > /dev/null 2>&1
-  if [[ $? == 0 ]]; then
-    printf "%s\n" "Issuer/${issuerName} already exists"
-  else
-    printf "Creating a cert-manager to generate client certificates for Scylla ...\n"
-  # Create an issuer from the CA secret
-  if [[ ${dataCenterName} == 'dc1' ]]; then
-  [[ ! -e tls/client ]] && mkdir -p tls/client
-  kubectl -n ${clusterNamespace} get configMap ${clusterName}-local-client-ca -o jsonpath="{.data['ca-bundle\.crt']}"       > tls/client/ca.crt
-  kubectl -n ${clusterNamespace} get secret    ${clusterName}-local-client-ca -o jsonpath="{.data['tls\.crt']}" | base64 -d > tls/client/tls.crt
-  kubectl -n ${clusterNamespace} get secret    ${clusterName}-local-client-ca -o jsonpath="{.data['tls\.key']}" | base64 -d > tls/client/tls.key
-  fi
-  kubectl -n cert-manager delete secret ${issuerName}-secret > /dev/null 2>&1 || true
-  kubectl -n cert-manager create secret generic ${issuerName}-secret \
-    --from-file=tls.crt=tls/client/tls.crt \
-    --from-file=tls.key=tls/client/tls.key \
-    --from-file=ca.crt=tls/client/ca.crt \
-    -o yaml --dry-run=client | kubectl apply -f -
-cat <<EOF | kubectl apply -f - > /dev/null 2>&1
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: ${issuerName}
-  #namespace: ${clusterNamespace}
-spec:
-  ca:
-    secretName: ${issuerName}-secret
-EOF
-  printf "Waiting for Issuer to become ready...\n"
-  if ! kubectl wait --for=condition=Ready "ClusterIssuer/${issuerName}" --timeout=120s; then
-      printf "%s\n" "* * * Error - Timed out waiting for Cert Issuer to become ready"
-      exit 1
-  fi
-  printf "... Done.\n"
-  fi # end of else
 
-  printf "Creating the server certificates\n"
 # kubectl -n ${clusterNamespace} delete Certificate ${clusterName}-client-certs > /dev/null 2>&1
 # generate the client certificate using the new cert-manager
-  printf "Creating the client certificates: ${clusterName}-client-certs\n"
+  printf "Creating the client certificates: ${clusterName}-client-certs with issuer: ${issuerName}\n"
   [[ $( kubectl get ns ${scyllaManagerNamespace} 2>/dev/null ) ]] || kubectl create ns ${scyllaManagerNamespace}
   for ns in ${clusterNamespace} ${scyllaManagerNamespace}; do
   kubectl -n ${ns} delete Certificate ${clusterName}-client-certs > /dev/null 2>&1  || true
@@ -668,7 +640,7 @@ fi
 
 if [[ ${customCerts} == true ]]; then
   printf "Using custom certificates for Scylla Manager\n"
-  issuerName="${clusterName}-client-issuer"
+  # issuerName="${clusterName}-client-issuer"
 # make certs for Scylla Manager using the new cert-manager
 # note: the first DNS name is the commonName for role mapping, the rest are SANs
 kubectl -n ${scyllaManagerNamespace} apply --server-side -f=- <<EOF

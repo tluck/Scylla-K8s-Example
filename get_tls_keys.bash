@@ -1,6 +1,7 @@
 #!/bin/bash
 
 namespace=${1:-scylla-dc1}
+[[ -d secret ]] || mkdir secret
 
 for secret in $( kubectl -n ${namespace} get secrets -o name)
 do 
