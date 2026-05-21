@@ -135,11 +135,12 @@ sleep 5
 # update the scylla-operator config
 # printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${dbVersion}\n"
 
-if [[ ${operatorTag} == "latest" || ${operatorTag} == *1.20* ]]; then
+if [[ ${operatorTag} == "latest" || ${operatorTag} =~ ^1\.2[0-9]\.[0-9] ]]; then
   utilsImage=${dbVersion}
   # [[ ${context} == *eks* ]] && utilsImage="2025.1.9" # because of the EKS 1.19 image bug
 else
-  utilsImage="2026.1.0" #"2025.1.9"
+  utilsImage="2026.1.3" #"2025.1.9"
+fi
 
 # the 2025.2.x and 2025.3.x images have a bug that prevents the scylla-operator from working properly
 printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${utilsImage}\n"
@@ -151,7 +152,6 @@ metadata:
 spec:
   scyllaUtilsImage: docker.io/scylladb/scylla:${utilsImage}
 EOF
-fi
 
 # Install the storageclass scylladb-local-xfs
 if [[ ${context} == *docker* ]]; then
