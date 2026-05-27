@@ -1,4 +1,6 @@
-export HOSTS="node-0.gce-us-west-1.0006ab8f55853443c0fc.clusters.scylla.cloud" #, "node-1.gce-us-west-1.0006ab8f55853443c0fc.clusters.scylla.cloud", "node-2.gce-us-west-1.0006ab8f55853443c0fc.clusters.scylla.cloud"
-export DC=GCE_US_WEST_1
-export USERNAME=scylla
-export PASSWORD=iBF7Iv46MtyfQdx
+export USERNAME='scylla'
+export PASSWORD='2QJoyC0Ebj1sWhq'
+export DC='GCE_US_WEST_1'
+export NODES=("node-0.gce-us-west-1.d992bfb83dfc28eea0f3.clusters.scylla.cloud", "node-1.gce-us-west-1.d992bfb83dfc28eea0f3.clusters.scylla.cloud", "node-2.gce-us-west-1.d992bfb83dfc28eea0f3.clusters.scylla.cloud")
+printf -v HOSTS '%s ' "${NODES[@]}"
+export HOSTS

@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 
-# set -eo pipefail
+# set -e intentionally left off — many kubectl calls rely on `|| true`.
+set -o pipefail
+trap 'rc=$?; printf "* * * %s failed at line %d (exit %d)\n" "${BASH_SOURCE[0]##*/}" "${LINENO}" "$rc" >&2' ERR
 
 date
-[[ -e init.conf ]] && source init.conf
+
+if [[ ! -e init.conf ]]; then
+  printf "* * * Error: init.conf not found in %s — run from the repo root\n" "$PWD" >&2
+  exit 1
+fi
+source init.conf
 
 options=${1:-""}
 [[ ${options} == '-c' ]] && clusterOnly=true || clusterOnly=false
@@ -36,18 +43,37 @@ if [[ ${options} == '-d' || ${options} == '-x' ]]; then
     # kubectl                        delete ClusterIssuer/${clusterName}-client-issuer || true
     kubectl -n ${clusterNamespace} delete ClusterIssuer/${clusterName}-server-issuer || true
 
-    kubectl -n ${clusterNamespace} patch  $( kubectl -n ${clusterNamespace} get ScyllaDBManagerTask -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
-    kubectl -n ${clusterNamespace} patch  $( kubectl -n ${clusterNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
-    kubectl -n ${scyllaManagerNamespace} patch  $( kubectl -n ${scyllaManagerNamespace} get ScyllaDBManagerClusterRegistration -o name ) -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+    # Without these guards, `kubectl <verb> $(get -o name)` errors with
+    # "resource(s) were provided, but no name was specified" when nothing matches.
+    items=$(kubectl -n ${clusterNamespace} get ScyllaDBManagerTask -o name 2>/dev/null) || true
+    [[ -n "${items}" ]] && kubectl -n ${clusterNamespace} patch ${items} -p '{"metadata":{"finalizers":[]}}' --type=merge || true
 
-    kubectl -n ${clusterNamespace} delete $( kubectl -n ${clusterNamespace} get pvc -o name| grep ${clusterName} | grep -v scylla-manager |grep -v prometheus ) || true
-    kubectl -n ${clusterNamespace} delete $( kubectl -n ${clusterNamespace} get pvc -o name | grep prometheus) || true
-    kubectl -n ${scyllaManagerNamespace} delete $( kubectl -n ${scyllaManagerNamespace} get pvc -o name | grep manager) || true
-    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.storageClassName=="scylladb-local-xfs" and .spec.claimRef.namespace == $ns) | .metadata.name') || true
-    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${scyllaManagerNamespace} '.items[] | select(.spec.claimRef.namespace == $ns) | .metadata.name' ) || true
-    kubectl delete pv $( kubectl get pv -o json | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.claimRef.namespace == $ns ) | .metadata.name' ) || true
-    kubectl delete ns ${clusterNamespace} || true
-    kubectl delete ns ${scyllaManagerNamespace} || true
+    items=$(kubectl -n ${clusterNamespace} get ScyllaDBManagerClusterRegistration -o name 2>/dev/null) || true
+    [[ -n "${items}" ]] && kubectl -n ${clusterNamespace} patch ${items} -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+
+    items=$(kubectl -n ${scyllaManagerNamespace} get ScyllaDBManagerClusterRegistration -o name 2>/dev/null) || true
+    [[ -n "${items}" ]] && kubectl -n ${scyllaManagerNamespace} patch ${items} -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+
+    items=$(kubectl -n ${clusterNamespace} get pvc -o name 2>/dev/null | grep ${clusterName} | grep -v scylla-manager | grep -v prometheus) || true
+    [[ -n "${items}" ]] && kubectl -n ${clusterNamespace} delete ${items} || true
+
+    items=$(kubectl -n ${clusterNamespace} get pvc -o name 2>/dev/null | grep prometheus) || true
+    [[ -n "${items}" ]] && kubectl -n ${clusterNamespace} delete ${items} || true
+
+    items=$(kubectl -n ${scyllaManagerNamespace} get pvc -o name 2>/dev/null | grep manager) || true
+    [[ -n "${items}" ]] && kubectl -n ${scyllaManagerNamespace} delete ${items} || true
+
+    items=$(kubectl get pv -o json 2>/dev/null | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.storageClassName=="scylladb-local-xfs" and .spec.claimRef.namespace == $ns) | .metadata.name') || true
+    [[ -n "${items}" ]] && kubectl delete pv ${items} || true
+
+    items=$(kubectl get pv -o json 2>/dev/null | jq -r --arg ns ${scyllaManagerNamespace} '.items[] | select(.spec.claimRef.namespace == $ns) | .metadata.name') || true
+    [[ -n "${items}" ]] && kubectl delete pv ${items} || true
+
+    items=$(kubectl get pv -o json 2>/dev/null | jq -r --arg ns ${clusterNamespace} '.items[] | select(.spec.claimRef.namespace == $ns ) | .metadata.name') || true
+    [[ -n "${items}" ]] && kubectl delete pv ${items} || true
+
+    kubectl delete ns ${clusterNamespace} --ignore-not-found
+    kubectl delete ns ${scyllaManagerNamespace} --ignore-not-found
   fi
   exit 0
 fi 
@@ -55,9 +81,8 @@ fi
 # deploy 
 
 printf "Using context: ${context}\n"
-kubectl get sc -o name|grep xfs 
-if [[ $? != 0 ]]; then
-    printf "\n* * * Error - Missing storage class - run setUpK8s.bash\n"
+if ! kubectl get sc -o name | grep -q xfs; then
+    printf "\n* * * Error - Missing storage class - run setupK8s.bash\n" >&2
     exit 1
 fi
 
@@ -598,7 +623,7 @@ kubectl -n ${clusterNamespace} patch deployment ${clusterName}-grafana --type='j
     \"path\": \"/spec/template/spec/initContainers/0/volumeMounts\",
     \"value\": [
       {\"name\": \"decompressed-configmaps\", \"mountPath\": \"/var/run/decompressed-configmaps\"},
-      {\"name\": \"${clusterName}-grafana-scylladb-dashboards-scylladb-master\", \"mountPath\": \"/var/run/configmaps/grafana-scylladb-dashboards/scylladb-master\"}
+      {\"name\": \"scylladb-master\", \"mountPath\": \"/var/run/configmaps/grafana-scylladb-dashboards/scylladb-master\"}
     ]
   }]"
 

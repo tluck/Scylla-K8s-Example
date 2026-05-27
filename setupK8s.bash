@@ -1,16 +1,36 @@
 #!/usr/bin/env bash
 
-date
-[[ -e init.conf ]] && source init.conf
+set -o pipefail
+trap 'rc=$?; printf "* * * %s failed at line %d (exit %d)\n" "${BASH_SOURCE[0]##*/}" "${LINENO}" "$rc" >&2' ERR
 
-if [[ ${1} == '-d' || ${1} == '-x' ]]; then
+date
+
+if [[ ! -e init.conf ]]; then
+  printf "* * * Error: init.conf not found in %s — run from the repo root\n" "$PWD" >&2
+  exit 1
+fi
+source init.conf
+
+if [[ ${1:-} == '-d' || ${1:-} == '-x' ]]; then
   printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
-  kubectl delete $(kubectl get nodeconfig -o name)
-  kubectl delete ns local-csi-driver
-  kubectl delete ns scylla-operator-node-tuning
+  nc=$(kubectl get nodeconfig -o name 2>/dev/null) || true
+  [[ -n "${nc}" ]] && kubectl delete ${nc} || true
+  kubectl delete ns local-csi-driver --ignore-not-found
+  kubectl delete ns scylla-operator-node-tuning --ignore-not-found
   helm uninstall monitoring       --namespace ${scyllaMonitoringNamespace}
   helm uninstall cert-manager     --namespace cert-manager
-  helm uninstall scylla-operator  --namespace scylla-operator
+  # Mirror the operator install path: helm uninstall if installed via Helm,
+  # otherwise kubectl delete the same upstream manifest URL.
+  if [[ ${helmEnabled} == true ]]; then
+    helm uninstall scylla-operator --namespace scylla-operator
+  else
+    if [[ ${operatorTag} == "latest" ]]; then
+      operatorUrl="https://raw.githubusercontent.com/scylladb/scylla-operator/refs/heads/master/deploy/operator.yaml"
+    else
+      operatorUrl="https://raw.githubusercontent.com/scylladb/scylla-operator/v${operatorTag}/deploy/operator.yaml"
+    fi
+    kubectl -n scylla-operator delete --ignore-not-found -f "${operatorUrl}"
+  fi
 
   [[ ${minioEnabled} == true ]] && ./deployMinio.bash ${1}
 
@@ -18,9 +38,10 @@ if [[ ${1} == '-d' || ${1} == '-x' ]]; then
     kubectl delete ns ${scyllaMonitoringNamespace}
     kubectl delete ns cert-manager
     kubectl delete ns scylla-operator
-    kubectl delete $( kubectl get crds -o name | grep scylla ) 
-    kubectl delete $( kubectl get crds -o name | grep cert-manager ) 
-    kubectl delete $( kubectl get crds -o name | grep coreos ) 
+    for pattern in scylla cert-manager coreos; do
+      items=$(kubectl get crds -o name 2>/dev/null | grep "${pattern}") || true
+      [[ -n "${items}" ]] && kubectl delete ${items} || true
+    done
   fi
 else
 
@@ -44,7 +65,7 @@ fi
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Installing the Cert-Manager via Helm\n"
 # Install the cert-manager
-status=$(helm status cert-manager --namespace cert-manager 2>&1)
+status=$(helm status cert-manager --namespace cert-manager 2>&1) || true  # exits 1 when release absent — handled below
 if [[ ${status} == *"not found"* ]]; then
 helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set crds.enabled=true \
   --set "nodeSelector.scylla\.scylladb\.com/node-type=${nodeSelector0}" \
@@ -58,7 +79,7 @@ fi
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Installing the prometheus-operator via Helm\n"
 # Install Prometheus Operator
-status=$(helm status monitoring --namespace ${scyllaMonitoringNamespace} 2>&1)
+status=$(helm status monitoring --namespace ${scyllaMonitoringNamespace} 2>&1) || true  # exits 1 when release absent — handled below
 if [[ ${status} == *"not found"* ]]; then
 # kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagerconfigs.yaml
 # kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagers.yaml
@@ -94,7 +115,7 @@ fi
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 if [[ ${helmEnabled} == true ]]; then
 printf "Installing the scylla-operator v${operatorTag} via Helm\n"
-status=$(helm status scylla-operator --namespace scylla-operator 2>&1)
+status=$(helm status scylla-operator --namespace scylla-operator 2>&1) || true  # exits 1 when release absent — handled below
 if [[ ${status} == *"not found"* ]]; then
 printf "Installing the scylla-operator v${operatorTag} via Helm\n"
 # Install Scylla Operator

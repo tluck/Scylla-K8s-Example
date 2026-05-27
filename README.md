@@ -19,10 +19,10 @@ Install these tools in addition to this repository:
 ### TL;DR
 
 1. For GKE, run `./makeK8s_GKE/makeBasicCluster.bash`. For EKS, run `./makeK8s_EKS/makeBasicClusterTerraform.bash` (or the parallel scripts under `test_EKS/` if you use that layout).
-2. Run `./setUpK8s.bash` — installs cert-manager, monitoring stack operator dependencies, Scylla Operator, local storage, and optional MinIO.
+2. Run `./setupK8s.bash` — installs cert-manager, monitoring stack operator dependencies, Scylla Operator, local storage, and optional MinIO.
 3. Edit `init.conf` as needed, then run `./deployScylla.bash` — deploys the Scylla cluster, ScyllaDB Monitoring, Scylla Manager, and optional port-forwards.
 
-Some environments use convenience symlinks `./_step_1` → `setUpK8s.bash` and `./_step_2` → `deployScylla.bash`; if those links are not present, invoke the scripts by name as above.
+Some environments use convenience symlinks `./_step_1` → `setupK8s.bash` and `./_step_2` → `deployScylla.bash`; if those links are not present, invoke the scripts by name as above.
 
 These flows assume node tuning (for example kubelet CPU manager policy) is applied as part of your cluster provisioning scripts where required.
 
@@ -30,7 +30,7 @@ These flows assume node tuning (for example kubelet CPU manager policy) is appli
 
 ## Configuration: `init.conf`
 
-`setUpK8s.bash` and `deployScylla.bash` both source `init.conf` when it exists. It defines:
+`setupK8s.bash` and `deployScylla.bash` both source `init.conf` when it exists. It defines:
 
 - **Install mode:** `helmEnabled` — Scylla cluster / manager via Helm charts vs raw manifests.
 - **Features:** `backupEnabled`, `minioEnabled`, `enableAlternator`, `enableAuth`, `enableTLS`, `mTLS`, `customCerts`, `writeIsolation`.
@@ -39,7 +39,7 @@ These flows assume node tuning (for example kubelet CPU manager policy) is appli
 
 ---
 
-## `setUpK8s.bash` — cluster prerequisites and operators
+## `setupK8s.bash` — cluster prerequisites and operators
 
 Run from the `k8s` directory (same directory as `init.conf`).
 
@@ -68,13 +68,13 @@ Run from the `k8s` directory (same directory as `init.conf`).
 | **`-x`** | Same as **`-d`**, plus deletes monitoring / cert-manager / scylla-operator namespaces and CRDs matching `scylla`, `cert-manager`, and `coreos` (Prometheus operator CRDs).                                                                                  |
 
 
-**Note:** Script filename is **`setUpK8s.bash`** (capital **U**), not `SetupK8s.bash` or `setupK8s.bash`.
+**Note:** Script filename is **`setupK8s.bash`** (capital **U**), not `SetupK8s.bash` or `setupK8s.bash`.
 
 ---
 
 ## `deployScylla.bash` — Scylla cluster, monitoring, and manager
 
-Run from the `k8s` directory after `setUpK8s.bash` has created the `scylladb-local-xfs` storage class.
+Run from the `k8s` directory after `setupK8s.bash` has created the `scylladb-local-xfs` storage class.
 
 ### Flags
 
@@ -88,7 +88,7 @@ Run from the `k8s` directory after `setUpK8s.bash` has created the `scylladb-loc
 
 ### Normal deploy flow (no teardown flags)
 
-1. **Preflight** — Verifies a storage class containing `xfs` exists (expects prior `setUpK8s.bash`).
+1. **Preflight** — Verifies a storage class containing `xfs` exists (expects prior `setupK8s.bash`).
 2. **Namespace** — Ensures `clusterNamespace` exists.
 3. **Backup agent secret** — If `backupEnabled`, creates `${clusterName}-agent-config-secret` with S3, MinIO, or GCS settings depending on context and `minioEnabled` / `gcs-service-account.json`.
 4. **TLS** — Optional custom server issuers/certificates (`customCerts`), client ClusterIssuer and certificates for `mTLS` or custom client TLS.
@@ -162,7 +162,7 @@ Use `kubectl exec` into the application pod as needed. For TLS material from the
 
 ## Destroy / cleanup
 
-- **`setUpK8s.bash -d`** or **`-x`** — Removes operators, monitoring stack install, cert-manager, local CSI driver namespace pieces, and optionally CRDs/namespaces (see table above).
+- **`setupK8s.bash -d`** or **`-x`** — Removes operators, monitoring stack install, cert-manager, local CSI driver namespace pieces, and optionally CRDs/namespaces (see table above).
 - **`deployScylla.bash -d`** or **`-x`** — Removes Scylla cluster, manager, monitoring, and certs; **`-x`** also clears PVCs/PVs and deletes cluster/manager namespaces.
 - **Cluster provisioning scripts** — `makeBasicCluster.bash` (GKE/EKS) often support **`-d`** to tear down the whole Kubernetes cluster.
 
@@ -175,7 +175,7 @@ These are worth knowing when navigating the tree:
 
 | Topic                | Note                                                                                                                                                    |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Step symlinks**    | README historically referenced `./_step_1` / `./_step_2`; they may not exist in every checkout — call `setUpK8s.bash` and `deployScylla.bash` directly. |
+| **Step symlinks**    | README historically referenced `./_step_1` / `./_step_2`; they may not exist in every checkout — call `setupK8s.bash` and `deployScylla.bash` directly. |
 | **Parallel trees**   | `makeK8s_EKS/` and `test_EKS/` contain similar Terraform/helper scripts; keep changes in sync if you maintain both.                                     |
 | **sample_app VCS**   | Nested `.git` directories under `sample_app` may appear; treat as optional submodules or vendored trees.                                                |
 

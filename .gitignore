@@ -1,7 +1,9 @@
 # Terraform
 .terraform/
+.terraform*/
 *.tfstate
 *.tfstate.*
+*state*
 .terraform.lock.hcl
 crash.log
 terraform.tfvars
@@ -9,6 +11,12 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+
+# Python
+__pycache__/
+
+# Git
+.git*
 
 # Bash execution output and logs
 *.log
@@ -47,6 +55,19 @@ override.tf.json
 # Output from port forwarding or local test clusters
 *.pid
 *.sock
+
+# Project-specific
+NU
+test*
+*dc1*
+my*
+docker-compose*
+gcs-service-account.json
+scylla*.yaml
+nodeconfig.yaml
+gcp_init.conf
+config/
+tls/
 
 # Miscellaneous
 node_modules/
