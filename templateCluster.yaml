@@ -3,21 +3,31 @@ kind: ScyllaCluster
 metadata:
   name: CLUSTERNAME
 spec:
-  agentVersion: AGENTVERSION # 3.7.0
+  agentVersion: AGENTVERSION # 3.10.1
   repository: docker.io/scylladb/scylla
-  version: DBVERSION # 2025.1.5
+  version: DBVERSION # 2026.1.4
   developerMode: DEVMODE
   scyllaArgs: "--smp=CPULIMIT" # "--poll-mode"
   #ALT alternator:
   #ALT   port: 8000
   #ALT   writeIsolation: WRITEISOLATION
+  #BAK backups:
+  #BAK   - name: daily
+  #BAK     location: [s3:S3BUCKETNAME]
+  #BAK     cron: "0 1 * * *" # Every day at 01:00
+  #BAK     retention: 14     # Keep 14 days of backups
+  #GCS backups:
+  #GCS   - name: daily
+  #GCS     location: [gcs:GCSBUCKETNAME]
+  #GCS     cron: "0 1 * * *" # Every day at 01:00
+  #GCS     retention: 14     # Keep 14 days of backups
   repairs:
-    - name: weekly-repair
-      cron: "0 0 * * 0" # Every Sunday at midnight       
+    - name: weekly
+      cron: "0 0 * * 0" # Every Sunday at midnight
       dc: ["DATACENTER"] # Specify the datacenter to run the repair in
       keyspace: ["*"]  # All keyspaces
-      intensity: "1"
-      parallel: 0
+      # intensity: 0 
+      # parallel:  0 # Running parallel tasks – regular and tablet repair tasks can only run in parallel when regular task uses  --parallel 0  (otherwise the second task fails to start and gets rescheduled)
   exposeOptions:
     broadcastOptions:
       clients:
