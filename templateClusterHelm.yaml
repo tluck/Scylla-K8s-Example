@@ -35,10 +35,15 @@ sysctls:
   - fs.aio-max-nr=30000000
 # Scylla Manager Backups task definition
 #BAK backups: #[]
-#BAK   - name: backup
+#BAK   - name: daily
 #BAK     location: [s3:S3BUCKETNAME]
-#GCS   - name: gcs
+#BAK     cron: "0 1 * * *" # Every day at 01:00
+#BAK     retention: 14     # Keep 14 days of backups
+#GCS backups: #[]
+#GCS   - name: daily
 #GCS     location: [gcs:GCSBUCKETNAME]
+#GCS     cron: "0 1 * * *" # Every day at 01:00
+#GCS     retention: 14     # Keep 14 days of backups
 # Scylla Manager Repair task definition
 repairs: []
 # scyllaArgs will be appended to Scylla binary startup parameters.

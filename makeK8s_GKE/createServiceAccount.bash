@@ -3,7 +3,13 @@
 source init.conf
 
 # if the account doesnt exist
-# gcloud iam service-accounts create gke-sa --display-name="gke-service-account"
+if [[ ! -e gcs-service-account.json ]]; then
+  echo "Creating the service account and granting permissions to the GCS bucket"
+  gcloud iam service-accounts create gke-sa --display-name="gke-service-account"
+else
+  echo "Service account json file already exists, skipping creation of service account and granting permissions to the GCS bucket"
+  exit 0
+fi
 
 gcloud storage buckets add-iam-policy-binding gs://${gcsBucketName} \
   --role=roles/storage.objectViewer \

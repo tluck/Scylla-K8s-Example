@@ -126,7 +126,7 @@ if [[ -e gcs-service-account.json && ${context} == *gke* ]]; then
     ZONE2="${gcpRegion}-b"
     ZONE3="${gcpRegion}-c"
   fi
-  kubectl -n ${clusterNamespace} delete secret gcs-service-account > /dev/null 2>&1
+  kubectl -n ${clusterNamespace} delete secret gcs-service-account > /dev/null 2>&1 || true
   kubectl -n ${clusterNamespace} create secret generic gcs-service-account \
     --from-file=gcs-service-account.json=gcs-service-account.json
 else
@@ -147,7 +147,11 @@ fi
 #eval $(cat ~/.aws/credentials|grep access|sed -e 's/ //g' -e 's/aws_access_key_id/export AWS_ACCESS_KEY_ID/' -e 's/aws_secret_access_key/export AWS_SECRET_ACCESS_KEY/')
 
 if [[ ${backupEnabled} == true ]]; then
-  bak=""
+  if [[ ${useS3} == '' || ${minio} == '' ]]; then
+    bak=""
+  else
+    bak="#"
+  fi
   kubectl -n ${clusterNamespace} delete secret ${clusterName}-agent-config-secret > /dev/null 2>&1 || true
   printf "Backup is enabled - Creating a secret to define the backup location\n"
   kubectl -n ${clusterNamespace} apply --server-side -f - <<EOF
@@ -616,6 +620,10 @@ kubectl -n ${clusterNamespace} get configmap ${clusterName}-grafana-provisioning
 kubectl -n ${clusterNamespace} get configmap ${clusterName}-grafana-provisioning -o yaml \
   | sed -e "s|timeInterval:.*|timeInterval: \"$scrape_interval\"|" \
   | kubectl -n ${clusterNamespace} apply -f -
+
+# add scylla-manager datasource for the manager dashboard to query cluster information from prometheus
+printf "Manager dashboard will use Prometheus datasource for metrics\n"
+
 printf "Patching the Grafana deployment to just use the most recent dashboards\n"
 kubectl -n ${clusterNamespace} patch deployment ${clusterName}-grafana --type='json' \
   -p="[{
@@ -623,7 +631,8 @@ kubectl -n ${clusterNamespace} patch deployment ${clusterName}-grafana --type='j
     \"path\": \"/spec/template/spec/initContainers/0/volumeMounts\",
     \"value\": [
       {\"name\": \"decompressed-configmaps\", \"mountPath\": \"/var/run/decompressed-configmaps\"},
-      {\"name\": \"scylladb-master\", \"mountPath\": \"/var/run/configmaps/grafana-scylladb-dashboards/scylladb-master\"}
+      {\"name\": \"scylladb-master\", \"mountPath\": \"/var/run/configmaps/grafana-scylladb-dashboards/scylladb-master\"},
+      {\"name\": \"manager-3\", \"mountPath\": \"/var/run/configmaps/grafana-scylladb-dashboards/manager-3\"}
     ]
   }]"
 
@@ -721,7 +730,28 @@ fi
 # wait for the scylla-manager deployment to be ready
 kubectl -n ${scyllaManagerNamespace} wait deployment/scylla-manager --for=condition=Available=True --timeout=${waitPeriod}
 
+# create a ServiceMonitor for Prometheus to scrape Scylla Manager metrics
+kubectl apply --server-side -f=- <<EOF
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: scylla-manager
+  namespace: ${scyllaManagerNamespace}
+  labels:
+    app.kubernetes.io/name: scylla-manager
+    release: monitoring
+    scylla-operator.scylladb.com/scylladbmonitoring-name: ${clusterName}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: scylla-manager
+  endpoints:
+  - port: metrics
+    interval: 30s
+EOF
+
 # add some permissions to the scylla and scylla-manager service accounts
+printf "Updating permissions for the Scylla and Scylla Manager service accounts\n"
 kubectl apply --server-side -f=- <<EOF #role-fix.yaml
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
@@ -774,11 +804,17 @@ roleRef:
   name: scylla-member-pod-watcher
   apiGroup: rbac.authorization.k8s.io
 EOF
-  
+printf "Scylla Manager deployed successfully.\n"
+
+printf "Adding/Updating the Scylla Manager repair tasks and updating cluster passwords - running update_scylla_manager.bash.\n"
+./update_scylla_manager.bash
+
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 # open up ports for Grafana, Scylla client (non-TLS and TLS), and MinIO
 kubectl -n ${clusterNamespace} wait deployment/${clusterName}-grafana  --for=condition=Available=True --timeout=90s
  
+# forward ports to a headless client service
+printf "Forwarding ports to the ${clusterName}-client-headless service for accessing Scylla and Grafana dashboards\n"
 [[ ${dataCenterName} == 'dc1' ]] && ./port_forward.bash
-
+  
 date

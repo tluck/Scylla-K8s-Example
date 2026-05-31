@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 source init.conf
-
-pkill -f "kubectl.*port-forward"
 localGrafanaPort=33000
 
+# kill all forwarding jobs
+pkill -f "kubectl.*port-forward"
 sleep 3
 
 if [[ ${minioEnabled} == true ]]; then
@@ -148,7 +148,7 @@ fi
 # Download certificate
 sleep 2
 if [[ -e /usr/bin/security ]]; then
-echo -n | openssl s_client -connect localhost:${localGrafanaPort} 2>/dev/null | \
+echo -n | openssl s_client -connect scylla-grafana:${localGrafanaPort} 2>/dev/null | \
   openssl x509 -outform PEM > /tmp/grafana-cert.pem
   if [[ ! -s /tmp/grafana-cert.pem ]]; then
   printf "Failed to retrieve Grafana certificate\n"
@@ -156,6 +156,7 @@ echo -n | openssl s_client -connect localhost:${localGrafanaPort} 2>/dev/null | 
   fi
   # Remove old cert if exists
   sudo security delete-certificate -c "localhost" -t /Library/Keychains/System.keychain 2>/dev/null || true
+  sudo security delete-certificate -c "scylla-grafana" -t /Library/Keychains/System.keychain 2>/dev/null || true
   # Add new cert
   sudo security add-trusted-cert -d -r trustAsRoot -k /Library/Keychains/System.keychain /tmp/grafana-cert.pem
   rm /tmp/grafana-cert.pem
