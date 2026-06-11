@@ -8,6 +8,7 @@ else
   location="s3:${s3BucketName}"
 fi
 
+# native is only supported for S3 not GCS
 [[ $1 == '-n' ]] && native=true || native=false
 
 # check status
@@ -28,11 +29,20 @@ else
 fi
 
 # make a backup
-printf "\nMaking a backup of cluster: ${clusterNamespace}/${clusterName} to ${location}\n"
+printf "\nMaking a backup of cluster: ${clusterNamespace}/${clusterName} to ${location} using the backup/daily task\n"
 if [[ $native == true ]]; then
   printf "... using native method\n"
-  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${clusterNamespace}/${clusterName} -L ${location} --method native
+  # kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${clusterNamespace}/${clusterName} -L ${location} --method native
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup update -c ${clusterNamespace}/${clusterName} -L ${location} --method native "backup/daily"
 else
   printf "... using rclone method\n"
-  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${clusterNamespace}/${clusterName} -L ${location}
+  # kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup -c ${clusterNamespace}/${clusterName} -L ${location}
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup update -c ${clusterNamespace}/${clusterName} -L ${location} --method rclone "backup/daily"
 fi
+
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool start -c ${clusterNamespace}/${clusterName} "backup/daily"
+  sleep 5
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool progress -c ${clusterNamespace}/${clusterName} "backup/daily"
+  sleep 5
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool progress -c ${clusterNamespace}/${clusterName} "backup/daily"
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool backup list -c ${clusterNamespace}/${clusterName}

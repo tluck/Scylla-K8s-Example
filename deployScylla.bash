@@ -9,8 +9,13 @@ date
 if [[ ! -e init.conf ]]; then
   printf "* * * Error: init.conf not found in %s — run from the repo root\n" "$PWD" >&2
   exit 1
+else
+  source init.conf
+  if [[ $rc -ne 0 ]]; then
+    printf "* * * Error: sourcing init.conf\n" >&2
+    exit 1
+  fi
 fi
-source init.conf
 
 options=${1:-""}
 [[ ${options} == '-c' ]] && clusterOnly=true || clusterOnly=false
@@ -408,11 +413,12 @@ else
   kubectl -n ${clusterNamespace} apply -f ${yaml}
 fi
 
-[[ -e gcs-service-account.json && ${context} == *gke* ]] && kubectl annotate serviceaccount --namespace ${clusterNamespace} ${clusterName}-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite  
-
 # wait
 printf "Waiting for ScyllaCluster/scylla resources to be ready within ${waitPeriod} \n" 
-sleep 5 
+sleep 3 
+# annotate the service account with the GCP service account email if using GCS for backup on GKE - this is needed for Workload Identity to work and allow the operator to access GCS using the annotated service account
+[[ -e gcs-service-account.json && ${context} == *gke* ]] && kubectl annotate serviceaccount --namespace ${clusterNamespace} ${clusterName}-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite  
+
 kubectl -n ${clusterNamespace} wait ScyllaCluster/${clusterName} --for=condition=Available=True --timeout=${waitPeriod}
 # Port 10000 is used for the Scylla REST API - patch the service to add this port if not already present
 existing_ports=$(kubectl -n ${clusterNamespace} get svc ${clusterName}-client -o json)
