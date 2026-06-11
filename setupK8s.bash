@@ -8,8 +8,13 @@ date
 if [[ ! -e init.conf ]]; then
   printf "* * * Error: init.conf not found in %s — run from the repo root\n" "$PWD" >&2
   exit 1
+else
+  source init.conf
+  if [[ $rc -ne 0 ]]; then
+    printf "* * * Error: sourcing init.conf\n" >&2
+    exit 1
+  fi
 fi
-source init.conf
 
 if [[ ${1:-} == '-d' || ${1:-} == '-x' ]]; then
   printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
@@ -37,7 +42,7 @@ if [[ ${1:-} == '-d' || ${1:-} == '-x' ]]; then
   if [[ ${1} == '-x' ]]; then
     kubectl delete ns ${scyllaMonitoringNamespace}
     kubectl delete ns cert-manager
-    kubectl delete ns scylla-operator
+    # kubectl delete ns scylla-operator || true # should alread be deleted
     for pattern in scylla cert-manager coreos; do
       items=$(kubectl get crds -o name 2>/dev/null | grep "${pattern}") || true
       [[ -n "${items}" ]] && kubectl delete ${items} || true
@@ -154,14 +159,12 @@ kubectl -n scylla-operator rollout status --timeout=90s deployment/scylla-operat
 
 sleep 5
 # update the scylla-operator config
-# printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${dbVersion}\n"
-
 if [[ ${operatorTag} == "latest" || ${operatorTag} =~ ^1\.2[0-9]\.[0-9] ]]; then
   utilsImage=${dbVersion}
-  # [[ ${context} == *eks* ]] && utilsImage="2025.1.9" # because of the EKS 1.19 image bug
 else
-  utilsImage="2026.1.3" #"2025.1.9"
+  utilsImage="2025.1.9"
 fi
+[[ ${context} == *eks* ]] && utilsImage="2025.1.9" # because of the EKS image bug
 
 # the 2025.2.x and 2025.3.x images have a bug that prevents the scylla-operator from working properly
 printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${utilsImage}\n"

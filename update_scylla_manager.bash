@@ -10,6 +10,9 @@ fi
 
 [[ $1 == '-n' ]] && native=true || native=false
 
+items=$(kubectl -n ${clusterNamespace} get ScyllaDBManagerClusterRegistration -o name 2>/dev/null)
+[[ -n "${items}" ]] && kubectl -n ${clusterNamespace} delete ${items}
+
 # check status
 upcount=0
 loop=0
