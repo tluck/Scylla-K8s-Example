@@ -8,40 +8,13 @@ context=$(kubectl config current-context 2>/dev/null)
 verb=create
 [[ $1 == "-d" ]] && verb=delete; shift
 
-export clusterName="${1:-tjl-scylla}"
-export PROJECT_ID="cx-sa-lab"
-export region="${gcpRegion:-us-west1}"
-export zone="${region}-a"
-
-# the actual names for clusters and zones are set in init.conf
-# domain="${clusterDomain:-sdb.com}"
-machineType0="e2-standard-8" # general operator and other services
-machineType1="n2-standard-8" # SSD based machines for ScyllaDB
-machineType2="c4a-standard-8" # arm64 application nodes
-# e2-standard-2 2 core x  8 GB
-# e2-standard-4 4 core x 16 GB
-# e2-standard-8 8 core x 32 GB
-imageType='UBUNTU_CONTAINERD' # 'COS_CONTAINERD'
-rootDiskSize="100GB"
-
-# Note: the next variable is set with variable names to be used with !name
-if [[ ${singleZone} == true ]]; then
-    gkeLocation="zone"
+if [[ -e gke.conf ]]; then 
+    source gke.conf
 else
-    gkeLocation="region"
+    printf "* * * | Missing gke.conf file\n"
+    exit 1
 fi
 
-if [[ ${gkeLocation} == "region" ]]; then
-    # 1 = 3 total nodes, 2 = 6 total nodes (2 per zone)x(3 zones)
-    nodesPer0=1
-    nodesPer1=2
-    nodesPer2=1 
-else
-    # 3 total nodes per zone
-    nodesPer0=3
-    nodesPer1=6
-    nodesPer2=1
-fi
 
 if [[ $verb == "create" ]]; then
 set -x
