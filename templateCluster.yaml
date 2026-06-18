@@ -79,16 +79,16 @@ spec:
                     #CLOUD   operator: In
                     #CLOUD   values:
                     #CLOUD   - ZONE1
-          podAntiAffinity: 
-            preferredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  labelSelector:
-                    matchLabels:
-                      app: scylla
-                  matchLabelKeys:
-                    - scylla/datacenter
-                  topologyKey: kubernetes.io/hostname
+          #PROD podAntiAffinity: 
+          #PROD   preferredDuringSchedulingIgnoredDuringExecution:
+          #PROD     - weight: 100
+          #PROD       podAffinityTerm:
+          #PROD         labelSelector:
+          #PROD           matchLabels:
+          #PROD             app: scylla
+          #PROD         matchLabelKeys:
+          #PROD           - scylla/datacenter
+          #PROD         topologyKey: kubernetes.io/hostname
           tolerations:
             - effect: NoSchedule
               key: scylla-operator.scylladb.com/dedicated
@@ -151,16 +151,16 @@ spec:
                     #CLOUD   operator: In
                     #CLOUD   values:
                     #CLOUD   - ZONE2
-          podAntiAffinity: 
-            preferredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  labelSelector:
-                    matchLabels:
-                      app: scylla
-                  matchLabelKeys:
-                    - scylla/datacenter
-                  topologyKey: kubernetes.io/hostname
+          #PROD podAntiAffinity: 
+          #PROD   preferredDuringSchedulingIgnoredDuringExecution:
+          #PROD     - weight: 100
+          #PROD       podAffinityTerm:
+          #PROD         labelSelector:
+          #PROD           matchLabels:
+          #PROD             app: scylla
+          #PROD         matchLabelKeys:
+          #PROD           - scylla/datacenter
+          #PROD         topologyKey: kubernetes.io/hostname
           tolerations:
             - effect: NoSchedule
               key: scylla-operator.scylladb.com/dedicated
@@ -223,16 +223,16 @@ spec:
                     #CLOUD   operator: In
                     #CLOUD   values:
                     #CLOUD   - ZONE3
-          podAntiAffinity: 
-            preferredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  labelSelector:
-                    matchLabels:
-                      app: scylla
-                  matchLabelKeys:
-                    - scylla/datacenter
-                  topologyKey: kubernetes.io/hostname
+          #PROD podAntiAffinity: 
+          #PROD   preferredDuringSchedulingIgnoredDuringExecution:
+          #PROD     - weight: 100
+          #PROD       podAffinityTerm:
+          #PROD         labelSelector:
+          #PROD           matchLabels:
+          #PROD             app: scylla
+          #PROD         matchLabelKeys:
+          #PROD           - scylla/datacenter
+          #PROD         topologyKey: kubernetes.io/hostname
           tolerations:
             - effect: NoSchedule
               key: scylla-operator.scylladb.com/dedicated

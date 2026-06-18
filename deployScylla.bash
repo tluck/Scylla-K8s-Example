@@ -100,14 +100,16 @@ printf "Cluster namespace: ${clusterNamespace}, name: ${clusterName}, datacenter
 bak="#BAK "
 gcs="#GCS "
 # set developerMode to true for docker-desktop (not actually using XFS)
-if [[ ${context} == *docker-desktop* ]]; then 
+[[ ${context} == *docker-desktop* ]] && cloud="#CLOUD "  || cloud=""
+if [[ ${context} == *docker-desktop* || ${developerMode} == true ]]; then 
   developerMode=true
-  cloud="#CLOUD " 
   dev=""
+  prod="#PROD "
+  printf "Developer mode is enabled\n"
 else
   developerMode=false
-  cloud=""
   dev="#DEV "
+  prod=""
 fi
 minio="#"
 awss3="#"
@@ -395,6 +397,7 @@ cat ${templateFile} | sed \
     -e "s|ZONE2|${ZONE2}|g" \
     -e "s|ZONE3|${ZONE3}|g" \
     -e "s|#DEV |${dev}|g" \
+    -e "s|#PROD |${prod}|g" \
     -e "s|#CTorG |${CTorG}|g" \
     -e "s|#CERTS |${certs}|g" \
     -e "s|#CUSTC |${cust_certs}|g" \
@@ -725,6 +728,7 @@ cat ${templateFile} | sed \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     -e "s|NODESELECTOR|${nodeSelector0}|g" \
     -e "s|#DEV |${dev}|g" \
+    -e "s|#PROD |${prod}|g" \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|#CUSTC |${certAuth}|g" \
     > ${yaml}
