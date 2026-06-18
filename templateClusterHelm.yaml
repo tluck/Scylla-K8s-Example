@@ -89,6 +89,16 @@ racks:
                   operator: In
                   values:
                     - NODESELECTOR
+      #PROD podAntiAffinity: 
+      #PROD   preferredDuringSchedulingIgnoredDuringExecution:
+      #PROD     - weight: 100
+      #PROD       podAffinityTerm:
+      #PROD         labelSelector:
+      #PROD           matchLabels:
+      #PROD             app: scylla
+      #PROD         matchLabelKeys:
+      #PROD           - scylla/datacenter
+      #PROD         topologyKey: kubernetes.io/hostname
       tolerations:
         - effect: NoSchedule
           key: scylla-operator.scylladb.com/dedicated
