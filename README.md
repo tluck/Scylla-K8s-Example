@@ -124,7 +124,7 @@ Port-forward details and local hostnames are handled in `port_forward.bash` when
 Example manager commands (adjust cluster name and namespace to match `init.conf`):
 
 ```bash
-sctool cluster update --username cassandra --password cassandra -c region1/scylla
+sctool cluster update --username ${authSuperuserName} --password ${authSuperuserPassword} -c region1/scylla
 sctool backup -c region1/scylla -L s3:scylla-backups-uswest2
 sctool backup -c region1/scylla -L gcs:scylla-backups-gke
 sctool backup --name="hourly_backup" --cluster="region1/scylla" --location='s3:scylla-backups-uswest2' --cron="@hourly" --retention=24

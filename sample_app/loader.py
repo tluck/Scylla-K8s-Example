@@ -21,7 +21,6 @@ from ssl import SSLContext, TLSVersion, CERT_REQUIRED, PROTOCOL_TLS_CLIENT
 
 # Constants
 COMPRESSION = "'sstable_compression': 'ZstdWithDictsCompressor'"
-TABLETS = "true"
 
 # Logging Setup
 DATE_FORMAT = '%Y-%m-%d'
@@ -46,8 +45,8 @@ def parse_args():
     parser.add_argument('--dc', default='dc1', help='Local datacenter name for ScyllaDB')
     parser.add_argument('-w', '--workers', type=int, default=0, help='Number of worker processes (0 = cpu_count())')
     parser.add_argument('-o', '--offset', type=int, default=0, help='Offset for ID generation to avoid collisions across runs')
-    parser.add_argument( '--buckets', type=int, default=256, help='Number of partition buckets (id %% buckets). More buckets = less hotspot risk per partition.',
-    )
+    parser.add_argument('--buckets', type=int, default=256, help='Number of partition buckets (id %% buckets). More buckets = less hotspot risk per partition.')
+    parser.add_argument('--tablets', action=argparse.BooleanOptionalAction, default=True, help='Enable tablets on the keyspace (use --no-tablets to disable)')
     return parser.parse_args()
 
 def str_time_prop(start, end, fmt, prop):
@@ -351,7 +350,8 @@ def main():
     logger.info(f"Using keyspace: {opts.keyspace}, table: {opts.table}")
     logger.info(f"Local DC: {opts.dc}")
     logger.info(f"Using consistency level: {opts.cl}")
-    logger.info(f"Row count to insert: {opts.row_count}, partition buckets: {opts.buckets}")
+    tablets = "true" if opts.tablets else "false"
+    logger.info(f"Row count to insert: {opts.row_count}, partition buckets: {opts.buckets}, tablets: {tablets}")
     if opts.buckets < 1:
         logger.error("--buckets must be >= 1")
         sys.exit(1)
@@ -384,7 +384,7 @@ def main():
             password=opts.password,
             keyspace=opts.keyspace,
             table=opts.table,
-            tablets=TABLETS,
+            tablets=tablets,
             compression=COMPRESSION,
             dc=opts.dc,
             local_only=opts.local_only,
