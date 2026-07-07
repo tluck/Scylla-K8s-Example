@@ -25,7 +25,7 @@ if [[ ${mTLS} == true ]]; then
 else
   printf "\nUpdating the cluster with Username creds\n"
   kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool cluster update -c ${clusterNamespace}/${clusterName} \
-    --username cassandra --password cassandra
+    --username ${authSuperuserName} --password ${authSuperuserPassword}
 fi
 
 # make a backup
