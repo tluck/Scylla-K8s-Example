@@ -298,7 +298,7 @@ if [[ ${enableAuth} == true && ${helmEnabled} == false ]]; then
     oper_certs=""
   fi
   [[ ${dbVersion} == "2026"* ]] && rf_rack_valid_keyspaces=false || rf_rack_valid_keyspaces=true
-  [[ "$(printf '%s\n' "2026.2" "${dbVersion}" | sort -V | head -n1)" == "2026.2" ]] &&  comment="" || comment="# "
+  [[ "$(printf '%s\n' "2026.2" "${dbVersion}" | sort -V | head -n1)" == "2026.2" ]] && feature_2026_2="" || feature_2026_2="# "
   # Superuser name/password for the config map. Single-quote the salted password so the
   # '$' chars in the bcrypt hash are NOT expanded by bash. Referencing the variable inside
   # the (unquoted) heredoc inserts the value literally without re-expanding those '$'.
@@ -319,8 +319,8 @@ data:
     authorizer: CassandraAuthorizer
     ${passAuth}authenticator: PasswordAuthenticator
     # starting with 2026.2 the superuser is not preset/hardcoded/default (cassandra/cassandra note encrypted pw)
-    ${comment}auth_superuser_name: "${authSuperuserName}"
-    ${comment}auth_superuser_salted_password: '${authSuperuserSaltedPassword}'
+    ${feature_2026_2}auth_superuser_name: "${authSuperuserName}"
+    ${feature_2026_2}auth_superuser_salted_password: '${authSuperuserSaltedPassword}'
     # uncomment to disable non-TLS ports
     # ${certAuth}native_transport_port: 9142
     # ${certAuth}native_shard_aware_transport_port: 19142
@@ -336,6 +336,7 @@ data:
     hinted_handoff_enabled: false
     compaction_static_shares: 100
     rf_rack_valid_keyspaces: ${rf_rack_valid_keyspaces}
+    ${feature_2026_2}enforce_rack_list: true 
     sstable_compression_dictionaries_retrain_period_in_seconds: 600 # 86400 (24 hours)
     sstable_compression_dictionaries_autotrainer_tick_period_in_seconds: 180 # 900 (15 minutes)
     sstable_compression_dictionaries_min_training_dataset_bytes: 1048576 # 1073741824 (1GB)
