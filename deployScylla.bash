@@ -297,8 +297,13 @@ if [[ ${enableAuth} == true && ${helmEnabled} == false ]]; then
     cust_certs="# "
     oper_certs=""
   fi
-  [[ ${dbVersion} == "2026"* ]] && rf_rack_valid_keyspaces=false || rf_rack_valid_keyspaces=true
+    if [[ ${dbVersion} == "2026"* ]]; then
+    rf_rack_valid_keyspaces=${rf_rack_valid_keyspaces:-false}
+    else
+    rf_rack_valid_keyspaces=${rf_rack_valid_keyspaces:-true}
+    fi
   [[ "$(printf '%s\n' "2026.2" "${dbVersion}" | sort -V | head -n1)" == "2026.2" ]] && feature_2026_2="" || feature_2026_2="# "
+    
   # Superuser name/password for the config map. Single-quote the salted password so the
   # '$' chars in the bcrypt hash are NOT expanded by bash. Referencing the variable inside
   # the (unquoted) heredoc inserts the value literally without re-expanding those '$'.
@@ -336,7 +341,7 @@ data:
     hinted_handoff_enabled: false
     compaction_static_shares: 100
     rf_rack_valid_keyspaces: ${rf_rack_valid_keyspaces}
-    ${feature_2026_2}enforce_rack_list: true 
+    ${feature_2026_2}enforce_rack_list: ${enforce_rack_list:-true}
     sstable_compression_dictionaries_retrain_period_in_seconds: 600 # 86400 (24 hours)
     sstable_compression_dictionaries_autotrainer_tick_period_in_seconds: 180 # 900 (15 minutes)
     sstable_compression_dictionaries_min_training_dataset_bytes: 1048576 # 1073741824 (1GB)
@@ -394,6 +399,7 @@ cat ${templateFile} | sed \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|DBVERSION|${dbVersion}|g" \
     -e "s|DEVMODE|${developerMode}|g" \
+    -e "s|MEMBERS|${members}|g" \
     -e "s|AGENTVERSION|${agentVersion}|g" \
     -e "s|DATACENTER|${dataCenterName}|g" \
     -e "s|CAPACITY|${dbCapacity}|g" \
