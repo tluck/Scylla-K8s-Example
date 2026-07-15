@@ -31,3 +31,6 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 gcloud iam service-accounts keys create gcs-service-account.json \
   --iam-account=${gkeServiceAccount}
 
+# Link the key into the repo root so deployScylla.bash finds it (target is
+# resolved relative to the link's location — the parent dir — hence the prefix)
+ln -sf makeK8s_GKE/gcs-service-account.json ../gcs-service-account.json

@@ -3,9 +3,9 @@ kind: ScyllaCluster
 metadata:
   name: CLUSTERNAME
 spec:
-  agentVersion: AGENTVERSION # 3.10.1
+  agentVersion: AGENTVERSION # 3.11.1
   repository: docker.io/scylladb/scylla
-  version: DBVERSION # 2026.1.4
+  version: DBVERSION # 2026.2.1
   developerMode: DEVMODE
   scyllaArgs: "--smp=CPULIMIT" # "--poll-mode"
   #ALT alternator:
@@ -48,7 +48,7 @@ spec:
     name: DATACENTER
     racks:
       - name: rack1
-        members: 1
+        members: MEMBERS
         storage:
           capacity: CAPACITY
           storageClassName: scylladb-local-xfs
@@ -120,7 +120,7 @@ spec:
         #GCS     readOnly: true
         #GCS     readOnly: true
       - name: rack2
-        members: 1
+        members: MEMBERS
         storage:
           capacity: CAPACITY
           storageClassName: scylladb-local-xfs
@@ -192,7 +192,7 @@ spec:
         #GCS     readOnly: true
 
       - name: rack3
-        members: 1
+        members: MEMBERS
         storage:
           capacity: CAPACITY
           storageClassName: scylladb-local-xfs

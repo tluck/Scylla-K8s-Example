@@ -82,6 +82,9 @@ if [[ ${imageType} == 'UBUNTU_CONTAINERD' ]]; then
   ./ubuntu-fix.bash
 fi
 
+# create the GCS SA
+createServiceAccount.bash
+
 else
 
 # verb=delete
