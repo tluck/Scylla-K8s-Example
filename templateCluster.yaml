@@ -3,10 +3,11 @@ kind: ScyllaCluster
 metadata:
   name: CLUSTERNAME
 spec:
-  agentVersion: AGENTVERSION # 3.11.1
   repository: docker.io/scylladb/scylla
   version: DBVERSION # 2026.2.1
+  agentVersion: AGENTVERSION # 3.11.1
   developerMode: DEVMODE
+  automaticOrphanedNodeCleanup: true
   scyllaArgs: "--smp=CPULIMIT" # "--poll-mode"
   #ALT alternator:
   #ALT   port: 8000
@@ -53,19 +54,11 @@ spec:
           capacity: CAPACITY
           storageClassName: scylladb-local-xfs
         resources:
-          requests:
-            cpu: CPULIMIT
-            memory: MEMORYLIMIT
-          limits:
-            cpu: CPULIMIT
-            memory: MEMORYLIMIT
+          requests: { cpu: CPULIMIT, memory: MEMORYLIMIT }
+          limits:   { cpu: CPULIMIT, memory: MEMORYLIMIT }
         agentResources:      # For ScyllaDB Agent container
-          requests:
-            cpu: "100m"
-            memory: "100Mi"
-          limits:
-            cpu: "100m"
-            memory: "100Mi"
+          requests: { cpu: "100m", memory: "100Mi" }
+          limits:   { cpu: "100m", memory: "100Mi" } 
         placement:
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:
@@ -125,19 +118,11 @@ spec:
           capacity: CAPACITY
           storageClassName: scylladb-local-xfs
         resources:
-          requests:
-            cpu: CPULIMIT
-            memory: MEMORYLIMIT
-          limits:
-            cpu: CPULIMIT
-            memory: MEMORYLIMIT
+          requests: { cpu: CPULIMIT, memory: MEMORYLIMIT }
+          limits:   { cpu: CPULIMIT, memory: MEMORYLIMIT }
         agentResources:      # For ScyllaDB Agent container
-          requests:
-            cpu: "100m"
-            memory: "100Mi"
-          limits:
-            cpu: "100m"
-            memory: "100Mi"
+          requests: { cpu: "100m", memory: "100Mi" }
+          limits:   { cpu: "100m", memory: "100Mi" } 
         placement:
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:
@@ -197,19 +182,11 @@ spec:
           capacity: CAPACITY
           storageClassName: scylladb-local-xfs
         resources:
-          requests:
-            cpu: CPULIMIT
-            memory: MEMORYLIMIT
-          limits:
-            cpu: CPULIMIT
-            memory: MEMORYLIMIT
+          requests: { cpu: CPULIMIT, memory: MEMORYLIMIT }
+          limits:   { cpu: CPULIMIT, memory: MEMORYLIMIT }
         agentResources:      # For ScyllaDB Agent container
-          requests:
-            cpu: "100m"
-            memory: "100Mi"
-          limits:
-            cpu: "100m"
-            memory: "100Mi"
+          requests: { cpu: "100m", memory: "100Mi" }
+          limits:   { cpu: "100m", memory: "100Mi" } 
         placement:
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:

@@ -17,20 +17,12 @@ controllerImage:
 logLevel: info
 # Resources allocated to Scylla Manager pods
 resources:
-  requests:
-    cpu: 10m
-    memory: 20Mi
-  limits:
-    cpu: MANAGERCPULIMIT # 1
-    memory: MANAGERMEMORYLIMIT # 1Gi
+  requests: { cpu:             10m, memory: 20Mi }
+  limits:   { cpu: MANAGERCPULIMIT, memory: MANAGERMEMORYLIMIT }
 # Resources allocated to Scylla Manager pods
 controllerResources:
-  requests:
-    cpu: 10m
-    memory: 20Mi
-  limits:
-    cpu: MANAGERCPULIMIT # 1
-    memory: MANAGERMEMORYLIMIT
+  requests: { cpu:             10m, memory: 20Mi }
+  limits:   { cpu: MANAGERCPULIMIT, memory: MANAGERMEMORYLIMIT }
 # Node selector for Scylla Manager pod
 nodeSelector: {}
 # Tolerations for Scylla Manager pod
@@ -78,19 +70,11 @@ scylla:
         capacity: MANAGERDBCAPACITY # 1Gi 
         storageClassName: "STORAGECLASS" # use default storage class"
       resources:
-        requests:
-          cpu: MANAGERDBCPULIMIT
-          memory: MANAGERDBMEMORYLIMIT
-        limits:
-          cpu: MANAGERDBCPULIMIT
-          memory: MANAGERDBMEMORYLIMIT # 2Gi
+        requests: { cpu: MANAGERDBCPULIMIT, memory: MANAGERDBMEMORYLIMIT }
+        limits:   { cpu: MANAGERDBCPULIMIT, memory: MANAGERDBMEMORYLIMIT }
       agentResources:      # For ScyllaDB Agent container
-        requests:
-          cpu: "100m"
-          memory: "100Mi"
-        limits:
-          cpu: "100m"
-          memory: "100Mi"
+        requests: { cpu: "100m", memory: "100Mi" }
+        limits:   { cpu: "100m", memory: "100Mi" }
       placement:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

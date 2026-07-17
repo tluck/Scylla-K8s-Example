@@ -111,12 +111,8 @@ spec:
         args:
         - --config-file=/mnt/etc/scylla-manager/scylla-manager.yaml
         resources:
-          requests:
-            cpu: 100m
-            memory: 200Mi
-          limits:
-            cpu: 100m
-            memory: 200Mi
+          requests: { cpu: 100m, memory: 200Mi }
+          limits:   { cpu: 100m, memory: 200Mi }
         readinessProbe:
           httpGet:
             path: /api/v1/clusters
@@ -171,19 +167,11 @@ spec:
           operator: Equal
           value: scyllaclusters
       resources:
-        requests:
-          cpu: MANAGERDBCPULIMIT
-          memory: MANAGERDBMEMORYLIMIT
-        limits:
-          cpu: MANAGERDBCPULIMIT
-          memory: MANAGERDBMEMORYLIMIT
+        requests: { cpu: MANAGERDBCPULIMIT, memory: MANAGERDBMEMORYLIMIT }
+        limits:   { cpu: MANAGERDBCPULIMIT, memory: MANAGERDBMEMORYLIMIT }
       agentResources:      # For ScyllaDB Agent container
-        requests:
-          cpu: "100m"
-          memory: "100Mi"
-        limits:
-          cpu: "100m"
-          memory: "100Mi"
+        requests: { cpu: "100m", memory: "100Mi" }
+        limits:   { cpu: "100m", memory: "100Mi" }
       storage:
         capacity: MANAGERDBCAPACITY
         storageClassName: STORAGECLASS
