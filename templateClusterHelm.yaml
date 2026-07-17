@@ -67,19 +67,11 @@ racks:
       capacity: CAPACITY 
     # Scylla container resource definition
     resources:
-      requests:
-        cpu: CPULIMIT
-        memory: MEMORYLIMIT
-      limits:
-        cpu: CPULIMIT
-        memory: MEMORYLIMIT
+      requests: { cpu: CPULIMIT, memory: MEMORYLIMIT }
+      limits:   { cpu: CPULIMIT, memory: MEMORYLIMIT }
     agentResources:      # For ScyllaDB Agent container
-      requests:
-        cpu: "100m"
-        memory: "100Mi"
-      limits:
-        cpu: "100m"
-        memory: "100Mi"
+      requests: { cpu: "100m", memory: "100Mi" }
+      limits:   { cpu: "100m", memory: "100Mi" } 
     placement:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:

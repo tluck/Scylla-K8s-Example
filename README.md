@@ -4,7 +4,7 @@ This repository holds examples of deploying ScyllaDB with the Kubernetes [Scylla
 
 ## End-to-End Deployment in K8s
 
-This example deploys a small-scale six-node cluster in a single datacenter (cloud region). Two node groups are typical: one dedicated to ScyllaDB and a second for supporting workloads. Optionally, a second datacenter can be deployed by changing `init.conf` and re-running the deploy script.
+This example deploys a small-scale three-node cluster (three racks with one member each) in a single datacenter (cloud region). The per-rack member count is configurable via `members` in `init.conf`. Two node groups are typical: one dedicated to ScyllaDB and a second for supporting workloads. Optionally, a second datacenter can be deployed by changing `init.conf` and re-running the deploy script.
 
 ### Prerequisites
 
@@ -35,7 +35,7 @@ These flows assume node tuning (for example kubelet CPU manager policy) is appli
 - **Install mode:** `helmEnabled` — Scylla cluster / manager via Helm charts vs raw manifests.
 - **Features:** `backupEnabled`, `minioEnabled`, `enableAlternator`, `enableAuth`, `enableTLS`, `mTLS`, `customCerts`, `writeIsolation`.
 - **Versions:** `operatorTag`, `dbVersion`, `managerVersion`, `agentVersion`, `prometheusVersion`.
-- **Topology:** `clusterName`, `dataCenterName`, `clusterNamespace`, `externalSeeds` (multi-DC), node selectors, capacities, and limits — often adjusted per `kubectl` context (`docker-desktop`, `gke`, `eks`, etc.).
+- **Topology:** `clusterName`, `dataCenterName`, `clusterNamespace`, `externalSeeds` (multi-DC), node selectors, `members` (nodes per rack), capacities, and limits — often adjusted per `kubectl` context (`docker-desktop`, `gke`, `eks`, etc.).
 
 ---
 

@@ -26,12 +26,8 @@ spec:
 # [/grafanaDatasources]
       # set to "Internal" to deploy Prometheus in the cluster
       resources:
-        requests:
-          cpu: "500m"
-          memory: "1Gi"
-        limits:
-          cpu: "2"
-          memory: "2Gi"
+        requests: { cpu: "500m", memory: "1Gi" }
+        limits:   { cpu:    "2", memory: "2Gi" }
       placement:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

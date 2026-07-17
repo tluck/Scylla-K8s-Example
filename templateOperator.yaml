@@ -14,9 +14,8 @@ image:
 logLevel: 2
 # Resources allocated to Scylla Operator pods
 resources:
-  requests:
-    cpu: 100m
-    memory: 20Mi
+  requests: { cpu: 100m, memory: 20Mi }
+  limits:   { cpu: 200m, memory: 60Mi }
 # Node selector for Scylla Operator pods
 nodeSelector: #{ }
   scylla.scylladb.com/node-type: NODESELECTOR
@@ -61,9 +60,8 @@ webhookServerReplicas: 1
 
 # Resources allocated to Webhook Server pods
 webhookServerResources:
-  requests:
-    cpu: 10m
-    memory: 20Mi
+  requests: { cpu: 10m, memory: 20Mi }
+  limits:   { cpu: 20m, memory: 60Mi }
 
 # Node selector for Webhook Server pods
 webhookServerNodeSelector: #{ }

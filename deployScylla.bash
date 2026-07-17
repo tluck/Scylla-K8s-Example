@@ -338,13 +338,13 @@ data:
     # Override defaults:
     audit: none
     auto_snapshot: false
-    hinted_handoff_enabled: false
     compaction_static_shares: 100
     rf_rack_valid_keyspaces: ${rf_rack_valid_keyspaces}
     ${feature_2026_2}enforce_rack_list: ${enforce_rack_list:-true}
     sstable_compression_dictionaries_retrain_period_in_seconds: 600 # 86400 (24 hours)
     sstable_compression_dictionaries_autotrainer_tick_period_in_seconds: 180 # 900 (15 minutes)
     sstable_compression_dictionaries_min_training_dataset_bytes: 1048576 # 1073741824 (1GB)
+    # hinted_handoff_enabled: false
     # enable_repair_based_node_ops: true
     # allowed_repair_based_node_ops: replace,removenode,rebuild
     # Native Backup
@@ -594,12 +594,8 @@ spec:
   serviceAccountName: "${clusterName}-prometheus"
   serviceName: "${clusterName}-prometheus"
   resources:
-    requests:
-      cpu: "500m"
-      memory: "1Gi"
-    limits:
-      cpu: "2"
-      memory: "2Gi"
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits:   { cpu:    "2", memory: "2Gi" }
   version: "${prometheusVersion}" # "v3.7.2"
   securityContext:
     runAsNonRoot: true
