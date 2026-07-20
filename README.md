@@ -33,7 +33,8 @@ These flows assume node tuning (for example kubelet CPU manager policy) is appli
 `setupK8s.bash` and `deployScylla.bash` both source `init.conf` when it exists. It defines:
 
 - **Install mode:** `helmEnabled` — Scylla cluster / manager via Helm charts vs raw manifests.
-- **Features:** `backupEnabled`, `minioEnabled`, `enableAlternator`, `enableAuth`, `enableTLS`, `mTLS`, `customCerts`, `writeIsolation`.
+- **Features:** `backupEnabled`, `minioEnabled`, `enableAlternator`, `enableAuth`, `enableTLS`, `mTLS`, `customCerts`, `encryptionAtRest`, `writeIsolation`.
+  - **`encryptionAtRest`** (Enterprise) — encrypts system data and all user tables at rest using a **locally-generated key** (`LocalFileSystemKeyProviderFactory`), no cloud KMS. On the first deploy `deployScylla.bash` generates `encryption_keys/system_key`, stores it as the `${clusterName}-encryption-key` secret, and mounts it into every Scylla pod at `/etc/scylla/encryption_keys/`; later deploys reuse the same key (from the local file, or recovered from the existing secret). Requires `enableAuth=true` and `helmEnabled=false` (it rides the custom `scylla.yaml` ConfigMap path). **Back up `encryption_keys/system_key` — losing it makes the encrypted data unrecoverable.**
 - **Versions:** `operatorTag`, `dbVersion`, `managerVersion`, `agentVersion`, `prometheusVersion`.
 - **Topology:** `clusterName`, `dataCenterName`, `clusterNamespace`, `externalSeeds` (multi-DC), node selectors, `members` (nodes per rack), capacities, and limits — often adjusted per `kubectl` context (`docker-desktop`, `gke`, `eks`, etc.).
 
