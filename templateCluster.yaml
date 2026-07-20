@@ -47,7 +47,7 @@ spec:
   #MDC   - EXTERNAL-SEED-3
   datacenter:
     name: DATACENTER
-    racks:
+    racks: # ideally 3 racks are used to match RF
       - name: rack1
         members: MEMBERS
         storage:
@@ -96,6 +96,10 @@ spec:
         #CERTS     configMap:
         #CERTS       name: CLUSTERNAME-local-serving-ca
         #CERTS       defaultMode: 420
+        #EAR   - name: CLUSTERNAME-encryption-key
+        #EAR     secret:
+        #EAR       secretName: CLUSTERNAME-encryption-key
+        #EAR       defaultMode: 420
         #GCS   - name: gcs-service-account
         #GCS     secret:
         #GCS       secretName: gcs-service-account
@@ -106,6 +110,9 @@ spec:
         #CERTS   - name: scylladb-serving-ca
         #CERTS     readOnly: true
         #CERTS     mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+        #EAR   - name: CLUSTERNAME-encryption-key
+        #EAR     readOnly: true
+        #EAR     mountPath: /etc/scylla/encryption_keys
         #GCS agentVolumeMounts:
         #GCS   - name: gcs-service-account
         #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
@@ -160,6 +167,10 @@ spec:
         #CERTS     configMap:
         #CERTS       name: CLUSTERNAME-local-serving-ca
         #CERTS       defaultMode: 420
+        #EAR   - name: CLUSTERNAME-encryption-key
+        #EAR     secret:
+        #EAR       secretName: CLUSTERNAME-encryption-key
+        #EAR       defaultMode: 420
         #GCS   - name: gcs-service-account
         #GCS     secret:
         #GCS       secretName: gcs-service-account
@@ -170,12 +181,14 @@ spec:
         #CERTS   - name: scylladb-serving-ca
         #CERTS     readOnly: true
         #CERTS     mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+        #EAR   - name: CLUSTERNAME-encryption-key
+        #EAR     readOnly: true
+        #EAR     mountPath: /etc/scylla/encryption_keys
         #GCS agentVolumeMounts:
         #GCS   - name: gcs-service-account
         #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
         #GCS     subPath: gcs-service-account.json
         #GCS     readOnly: true
-
       - name: rack3
         members: MEMBERS
         storage:
@@ -224,6 +237,10 @@ spec:
         #CERTS     configMap:
         #CERTS       name: CLUSTERNAME-local-serving-ca
         #CERTS       defaultMode: 420
+        #EAR   - name: CLUSTERNAME-encryption-key
+        #EAR     secret:
+        #EAR       secretName: CLUSTERNAME-encryption-key
+        #EAR       defaultMode: 420
         #GCS   - name: gcs-service-account
         #GCS     secret:
         #GCS       secretName: gcs-service-account
@@ -234,6 +251,9 @@ spec:
         #CERTS   - name: scylladb-serving-ca
         #CERTS     readOnly: true
         #CERTS     mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+        #EAR   - name: CLUSTERNAME-encryption-key
+        #EAR     readOnly: true
+        #EAR     mountPath: /etc/scylla/encryption_keys
         #GCS agentVolumeMounts:
         #GCS   - name: gcs-service-account
         #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json

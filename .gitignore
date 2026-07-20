@@ -42,6 +42,9 @@ __pycache__/
 *.crt
 *.key
 
+# Encryption at Rest local key material (back this up securely - do NOT commit)
+encryption_keys/
+
 # VS Code and JetBrains IDEs
 .vscode/
 .idea/

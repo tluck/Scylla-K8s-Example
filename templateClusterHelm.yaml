@@ -52,7 +52,7 @@ scyllaArgs: ""
 imagePullSecrets: []
 # Name of datacenter
 datacenter: DATACENTER
-# List of racks
+# List of racks - 3 racks match RF
 racks:
   - name: rack1
     # Name of additional scylla config configMap
@@ -60,7 +60,123 @@ racks:
     # Name of additional scylla manager agent config stored as secret
     scyllaAgentConfig: scylla-agent-config-secret
     # Number of rack members (nodes)
-    members: 3
+    members: ${members}
+    # Storage definition
+    storage:
+      storageClassName: scylladb-local-xfs
+      capacity: CAPACITY 
+    # Scylla container resource definition
+    resources:
+      requests: { cpu: CPULIMIT, memory: MEMORYLIMIT }
+      limits:   { cpu: CPULIMIT, memory: MEMORYLIMIT }
+    agentResources:      # For ScyllaDB Agent container
+      requests: { cpu: "100m", memory: "100Mi" }
+      limits:   { cpu: "100m", memory: "100Mi" } 
+    placement:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: scylla.scylladb.com/node-type
+                  operator: In
+                  values:
+                    - NODESELECTOR
+      #PROD podAntiAffinity: 
+      #PROD   preferredDuringSchedulingIgnoredDuringExecution:
+      #PROD     - weight: 100
+      #PROD       podAffinityTerm:
+      #PROD         labelSelector:
+      #PROD           matchLabels:
+      #PROD             app: scylla
+      #PROD         matchLabelKeys:
+      #PROD           - scylla/datacenter
+      #PROD         topologyKey: kubernetes.io/hostname
+      tolerations:
+        - effect: NoSchedule
+          key: scylla-operator.scylladb.com/dedicated
+          operator: Equal
+          value: scyllaclusters
+    volumes:
+      # - name: tls-certificates
+      #   secret:
+      #     secretName: scylla-server-certs # Reference the secret containing certificates.
+      - name: scylladb-serving-ca
+        configMap:
+          name: scylla-local-serving-ca
+          defaultMode: 420
+    #GCS   - name: gcs-service-account
+    #GCS     secret:
+    #GCS       secretName: gcs-service-account
+    #GCS agentVolumeMounts:
+    #GCS   - name: gcs-service-account
+    #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
+    #GCS     subPath: gcs-service-account.json
+    #GCS     readOnly: true
+  - name: rack2
+    # Name of additional scylla config configMap
+    scyllaConfig: scylla-config
+    # Name of additional scylla manager agent config stored as secret
+    scyllaAgentConfig: scylla-agent-config-secret
+    # Number of rack members (nodes)
+    members: ${members}
+    # Storage definition
+    storage:
+      storageClassName: scylladb-local-xfs
+      capacity: CAPACITY 
+    # Scylla container resource definition
+    resources:
+      requests: { cpu: CPULIMIT, memory: MEMORYLIMIT }
+      limits:   { cpu: CPULIMIT, memory: MEMORYLIMIT }
+    agentResources:      # For ScyllaDB Agent container
+      requests: { cpu: "100m", memory: "100Mi" }
+      limits:   { cpu: "100m", memory: "100Mi" } 
+    placement:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: scylla.scylladb.com/node-type
+                  operator: In
+                  values:
+                    - NODESELECTOR
+      #PROD podAntiAffinity: 
+      #PROD   preferredDuringSchedulingIgnoredDuringExecution:
+      #PROD     - weight: 100
+      #PROD       podAffinityTerm:
+      #PROD         labelSelector:
+      #PROD           matchLabels:
+      #PROD             app: scylla
+      #PROD         matchLabelKeys:
+      #PROD           - scylla/datacenter
+      #PROD         topologyKey: kubernetes.io/hostname
+      tolerations:
+        - effect: NoSchedule
+          key: scylla-operator.scylladb.com/dedicated
+          operator: Equal
+          value: scyllaclusters
+    volumes:
+      # - name: tls-certificates
+      #   secret:
+      #     secretName: scylla-server-certs # Reference the secret containing certificates.
+      - name: scylladb-serving-ca
+        configMap:
+          name: scylla-local-serving-ca
+          defaultMode: 420
+    #GCS   - name: gcs-service-account
+    #GCS     secret:
+    #GCS       secretName: gcs-service-account
+    #GCS agentVolumeMounts:
+    #GCS   - name: gcs-service-account
+    #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
+    #GCS     subPath: gcs-service-account.json
+    #GCS     readOnly: true
+  - name: rack3
+    # Name of additional scylla config configMap
+    scyllaConfig: scylla-config
+    # Name of additional scylla manager agent config stored as secret
+    scyllaAgentConfig: scylla-agent-config-secret
+    # Number of rack members (nodes)
+    members: ${members}
     # Storage definition
     storage:
       storageClassName: scylladb-local-xfs

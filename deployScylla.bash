@@ -280,6 +280,38 @@ fi
 # create a configMap to define Scylla options
 kubectl -n ${clusterNamespace} delete configmap ${clusterName}-config > /dev/null 2>&1 || true
 [[ ${gcs} == "" ]] && CTorG=""|| CTorG="#CTorG "
+# Encryption at Rest (local key, no cloud KMS). Generate the key once, reuse it thereafter, and mount it into
+# every Scylla pod via the ${clusterName}-encryption-key secret. Uses the custom configMap path, so it needs
+# enableAuth=true and helmEnabled=false (same coupling as enableTLS).
+ear="#EAR "
+if [[ ${encryptionAtRest} == true ]]; then
+  if [[ ${enableAuth} == true && ${helmEnabled} == false ]]; then
+    ear=""
+    CTorG=""   # ensure the racks' volumes:/volumeMounts: parents render for the key mount
+    earKeyFile="encryption_keys/system_key"
+    if [[ ! -e ${earKeyFile} ]]; then
+      mkdir -p encryption_keys
+      # Recover a previously-created key from the in-cluster secret if it exists, otherwise generate a new one.
+      earExisting=$(kubectl -n ${clusterNamespace} get secret ${clusterName}-encryption-key -o jsonpath='{.data.system_key}' 2>/dev/null | base64 -d 2>/dev/null)
+      if [[ -n ${earExisting} ]]; then
+        printf "Encryption at Rest: recovering the existing key from the %s-encryption-key secret\n" "${clusterName}"
+        printf '%s' "${earExisting}" > ${earKeyFile}
+      else
+        printf "Encryption at Rest: generating a new local key (LocalFileSystemKeyProviderFactory)\n"
+        # scylla key-file format: <cipher_algorithm>:<key_strength_bits>:<base64 key material>
+        printf 'AES/CBC/PKCS5Padding:128:%s\n' "$(openssl rand -base64 16)" > ${earKeyFile}
+        chmod 600 ${earKeyFile}
+        printf "*** Encryption at Rest: BACK UP %s -- losing it makes the encrypted data unrecoverable ***\n" "${earKeyFile}"
+      fi
+    else
+      printf "Encryption at Rest: using existing local key %s\n" "${earKeyFile}"
+    fi
+    kubectl -n ${clusterNamespace} delete secret ${clusterName}-encryption-key > /dev/null 2>&1 || true
+    kubectl -n ${clusterNamespace} create secret generic ${clusterName}-encryption-key --from-file=system_key=${earKeyFile}
+  else
+    printf "WARNING: encryptionAtRest=true requires enableAuth=true and helmEnabled=false - skipping encryption at rest\n"
+  fi
+fi
 certs="#CERTS "
 # generate the configMap only if auth is enabled and not using Helm
 if [[ ${enableAuth} == true && ${helmEnabled} == false ]]; then
@@ -380,6 +412,17 @@ data:
       ${certs}${oper_certs}certificate: /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.crt
       ${certs}${oper_certs}keyfile:     /var/run/secrets/scylla-operator.scylladb.com/scylladb/serving-certs/tls.key
       ${certs}${oper_certs}truststore:  /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca/ca-bundle.crt
+    # Encryption at Rest - local key (no cloud KMS). Key mounted from the ${clusterName}-encryption-key secret.
+    ${ear}system_info_encryption:
+    ${ear}  enabled: true
+    ${ear}  key_provider: LocalFileSystemKeyProviderFactory
+    ${ear}  secret_key_file: /etc/scylla/encryption_keys/system_key
+    ${ear}user_info_encryption:
+    ${ear}  enabled: true
+    ${ear}  cipher_algorithm: AES/CBC/PKCS5Padding
+    ${ear}  secret_key_strength: 128
+    ${ear}  key_provider: LocalFileSystemKeyProviderFactory
+    ${ear}  secret_key_file: /etc/scylla/encryption_keys/system_key
 EOF
 
 fi # end of enableAuth == true
@@ -420,6 +463,7 @@ cat ${templateFile} | sed \
     -e "s|#CTorG |${CTorG}|g" \
     -e "s|#CERTS |${certs}|g" \
     -e "s|#CUSTC |${cust_certs}|g" \
+    -e "s|#EAR |${ear}|g" \
     -e "s|WRITEISOLATION|${writeIsolation}|g" \
     -e "s|EXTERNAL-SEED-1|${externalSeeds[0]}|g" \
     -e "s|EXTERNAL-SEED-2|${externalSeeds[1]}|g" \
