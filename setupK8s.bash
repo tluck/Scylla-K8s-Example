@@ -144,7 +144,7 @@ else
   url="https://raw.githubusercontent.com/scylladb/scylla-operator/v${operatorTag}/deploy/operator.yaml"
 fi
 printf "Installing the scylla-operator v${operatorTag} via kubectl\n"
-kubectl -n=scylla-operator apply --server-side -f=${url}
+kubectl -n=scylla-operator apply --server-side --force-conflicts -f=${url}
 if [ $? -ne 0 ]; then
   printf "%s\n" "* * * Error - Launching Scylla Operator"
   exit 1
