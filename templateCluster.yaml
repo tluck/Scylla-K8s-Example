@@ -29,6 +29,12 @@ spec:
       keyspace: ["*"]  # All keyspaces
       # intensity: 0 
       # parallel:  0 # Running parallel tasks – regular and tablet repair tasks can only run in parallel when regular task uses  --parallel 0  (otherwise the second task fails to start and gets rescheduled)
+  # network.hostNetworking is deprecated; node-IP exposure is covered by
+  # exposeOptions (nodeService: Headless + broadcastOptions PodIP/PodIP below).
+  # dnsPolicy ClusterFirstWithHostNet is only needed when hostNetworking is on.
+  # network:
+  #   hostNetworking: true
+  #   dnsPolicy: ClusterFirstWithHostNet
   exposeOptions:
     broadcastOptions:
       clients:
