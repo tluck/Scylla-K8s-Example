@@ -56,4 +56,4 @@ printf "\nUpdating the existing repair task for vnodes only and intensity 0\n"
 kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool repair update -c ${clusterNamespace}/${clusterName} --keyspace-replication=vnodes --intensity=0 --parallel=0 repair/weekly
 
 # dump out the tasks for the cluster
-kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool tasks --cluster ${clusterNamespace}/${clusterName} --show-properties
+kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool tasks --cluster ${clusterNamespace}/${clusterName} --show-properties | grep -v '^+---' | cut -d'|' -f2,4-14

@@ -20,7 +20,7 @@ if [[ $verb == "create" ]]; then
 set -x
 # create a cluster with a default node pool for the operator and other services
 gcloud container clusters ${verb} ${clusterName} --${gkeLocation}="${!gkeLocation}" \
-  --tier "standard" \
+  --release-channel=regular \
   --cluster-version="latest" \
   --num-nodes=${nodesPer0} \
   --machine-type="${machineType0}" \

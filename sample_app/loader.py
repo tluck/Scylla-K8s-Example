@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument('-u', '--username', default="cassandra", help='ScyllaDB username')
     parser.add_argument('-p', '--password', default="cassandra", help='ScyllaDB password')
     parser.add_argument('-k', '--keyspace', default="myKeyspace", help='Keyspace name')
+    parser.add_argument('--rf', type=int, default=3, help='Replication factor for the keyspace (default 3)')
     parser.add_argument('-t', '--table', default="myTable", help='Table name')
     parser.add_argument('-d', '--drop', action="store_true", help='Drop table if exists')
     parser.add_argument('-r', '--row_count', type=int, default=100000, help='Number of rows to insert')
@@ -58,10 +59,10 @@ def str_time_prop(start, end, fmt, prop):
 def random_date(start, end, prop):
     return str_time_prop(start, end, DATE_FORMAT, prop)
 
-def create_schema(session, keyspace, table, tablets, compression):
+def create_schema(session, keyspace, table, tablets, compression, rf):
     create_ks = f"""
         CREATE KEYSPACE IF NOT EXISTS {keyspace}
-        WITH replication = {{'class' : 'NetworkTopologyStrategy', 'replication_factor' : 3}}
+        WITH replication = {{'class' : 'NetworkTopologyStrategy', 'replication_factor' : {rf}}}
         AND tablets = {{'enabled': {tablets} }};
     """
     # Single table: bucket spreads partitions; id is unique clustering key
@@ -238,6 +239,7 @@ def insert_data_parallel(
     table,
     tablets,
     compression,
+    rf,
     dc,
     local_only,
     consistency_level,
@@ -250,7 +252,7 @@ def insert_data_parallel(
     # One control session in parent to create schema (safe and simple)
     ctrl_cluster, ctrl_session = _build_cluster_and_session(hosts, port, username, password, dc, local_only)
     try:
-        create_schema(ctrl_session, keyspace, table, tablets, compression)
+        create_schema(ctrl_session, keyspace, table, tablets, compression, rf)
     finally:
         try:
             ctrl_session.shutdown()
@@ -347,13 +349,16 @@ def main():
     else:
         logger.info(f"Connecting to cluster: {hosts}:{port} with username/password authentication: {username}")
 
-    logger.info(f"Using keyspace: {opts.keyspace}, table: {opts.table}")
+    logger.info(f"Using keyspace: {opts.keyspace}, table: {opts.table}, rf: {opts.rf}")
     logger.info(f"Local DC: {opts.dc}")
     logger.info(f"Using consistency level: {opts.cl}")
     tablets = "true" if opts.tablets else "false"
     logger.info(f"Row count to insert: {opts.row_count}, partition buckets: {opts.buckets}, tablets: {tablets}")
     if opts.buckets < 1:
         logger.error("--buckets must be >= 1")
+        sys.exit(1)
+    if opts.rf < 1:
+        logger.error("--rf must be >= 1")
         sys.exit(1)
     logger.info(f"Workers: {opts.workers or cpu_count()}")
     if opts.local_only:
@@ -386,6 +391,7 @@ def main():
             table=opts.table,
             tablets=tablets,
             compression=COMPRESSION,
+            rf=opts.rf,
             dc=opts.dc,
             local_only=opts.local_only,
             consistency_level=opts.cl,
