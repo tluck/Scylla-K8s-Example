@@ -6,7 +6,7 @@ set -euo pipefail
 
 # Allow overriding from environment, with defaults
 myRegistry="${DOCKER_REGISTRY:-docker.io/tjlscylladb}"
-imageVersion="${PYTHON_IMAGE_VERSION:-3.14.3-slim}"
+imageVersion="${PYTHON_IMAGE_VERSION:-3.14.7-slim}"
 
 printf "Building %s/python3-apps:%s\n" "${myRegistry}" "${imageVersion}"
 

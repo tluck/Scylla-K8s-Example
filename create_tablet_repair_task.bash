@@ -26,4 +26,4 @@ spec:
       - "*"
 EOF
 
-kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool tasks --cluster ${clusterNamespace}/${clusterName}
+kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool tasks --cluster ${clusterNamespace}/${clusterName} | grep -v '^+---' | cut -d'|' -f2,4-14
