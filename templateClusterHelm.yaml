@@ -44,8 +44,14 @@ sysctls:
 #GCS     location: [gcs:GCSBUCKETNAME]
 #GCS     cron: "0 1 * * *" # Every day at 01:00
 #GCS     retention: 14     # Keep 14 days of backups
-# Scylla Manager Repair task definition
-repairs: []
+# Scylla Manager Repair task definition - kept in sync with templateCluster.yaml
+repairs:
+  - name: weekly
+    cron: "0 0 * * 0" # Every Sunday at midnight
+    dc: ["DATACENTER"] # Specify the datacenter to run the repair in
+    keyspace: ["*"]  # All keyspaces
+    # intensity: 0
+    # parallel:  0 # Running parallel tasks – regular and tablet repair tasks can only run in parallel when regular task uses  --parallel 0  (otherwise the second task fails to start and gets rescheduled)
 # scyllaArgs will be appended to Scylla binary startup parameters.
 scyllaArgs: ""
 # ImagePullSecrets used for pulling Scylla and Agent images

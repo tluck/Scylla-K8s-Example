@@ -8,8 +8,10 @@ pkill -f "kubectl.*port-forward"
 sleep 3
 
 if [[ ${minioEnabled} == true ]]; then
-  printf "Port-forward service/minio 9000:9000\n"
-  kubectl -n minio port-forward service/minio 9000:9000 > /dev/null 2>&1 &
+  # use the headless service - it natively listens on 9000; the minio operator
+  # keeps resetting service/minio back to port 80 on tenant reconcile
+  printf "Port-forward service/minio-hl 9000:9000\n"
+  kubectl -n minio port-forward service/minio-hl 9000:9000 > /dev/null 2>&1 &
 fi
 
 printf "Creating a headleass service for client access\n"

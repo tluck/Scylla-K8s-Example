@@ -18,7 +18,7 @@ Install these tools in addition to this repository:
 
 ### TL;DR
 
-1. For GKE, run `./makeK8s_GKE/makeBasicCluster.bash`. For EKS, run `./makeK8s_EKS/makeBasicClusterTerraform.bash` (or the parallel scripts under `test_EKS/` if you use that layout).
+1. For GKE, run `./makeK8s_GKE/makeBasicCluster.bash`. For EKS, run `./makeK8s_EKS/makeBasicClusterTerraform.bash`.
 2. Run `./setupK8s.bash` — installs cert-manager, monitoring stack operator dependencies, Scylla Operator, local storage, and optional MinIO.
 3. Edit `init.conf` as needed, then run `./deployScylla.bash` — deploys the Scylla cluster, ScyllaDB Monitoring, Scylla Manager, and optional port-forwards.
 
@@ -177,7 +177,6 @@ These are worth knowing when navigating the tree:
 | Topic                | Note                                                                                                                                                    |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Step symlinks**    | README historically referenced `./_step_1` / `./_step_2`; they may not exist in every checkout — call `setupK8s.bash` and `deployScylla.bash` directly. |
-| **Parallel trees**   | `makeK8s_EKS/` and `test_EKS/` contain similar Terraform/helper scripts; keep changes in sync if you maintain both.                                     |
 | **sample_app VCS**   | Nested `.git` directories under `sample_app` may appear; treat as optional submodules or vendored trees.                                                |
 
 

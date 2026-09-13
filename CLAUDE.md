@@ -61,6 +61,7 @@ The `#XYZ ` placeholders work as comment toggles: a sed replacement of `#BAK ` �
 # Stuck-resource recovery
 ./remove_stuck_crds.bash <type/name> <namespace>   # strips finalizers, then deletes
 ./remove_stuck_namespace.bash <namespace>
+./remove_stuck_manager_tasks.bash [namespace]      # Degraded ScyllaDBManagerTasks
 ./remove_stuck_pv.bash <pv-name> [<pv-name>...]    # validated: refuses --all / non-pv
 
 # Operator upgrade
@@ -71,7 +72,7 @@ The `#XYZ ` placeholders work as comment toggles: a sed replacement of `#BAK ` �
 
 Underlying Kubernetes provisioning lives in sibling trees — **not** in `setupK8s.bash`:
 
-- **`makeK8s_GKE/`** — `makeBasicCluster.bash`, plus `create_second_pool.bash` for a second nodepool. `createServiceAccount.bash` creates the GKE service account used for Workload Identity on GCS backups.
+- **`makeK8s_GKE/`** — `makeBasicCluster.bash`, plus `create_second_pool.bash` for a second nodepool. `createServiceAccount.bash` creates the `gke-sa` GCP service account, grants it the bucket roles, and mints a JSON key to `gcs-service-account.json` (symlinked into the repo root). **The credentials that actually reach the agents are that key file** — `deployScylla.bash` puts it in the `gcs-service-account` secret, which `templateCluster.yaml` mounts at `/etc/scylla-manager-agent/gcs-service-account.json`. `deployScylla.bash` also applies the `iam.gke.io/gcp-service-account` Workload Identity annotation to the member ServiceAccount, but nothing depends on it while the key file is mounted; treat the key file as the authoritative mechanism.
 - **`makeK8s_EKS/`** — Terraform (`eks.tf.v6` / `eks.tf.v5`, `variables.tf`); driven by `makeBasicClusterTerraform.bash`. Also has `create_cluster_eksctl.bash` (alternative path) and `nodeadm.bash` / `nodeconfig.bash` for in-place node tuning.
 
 Both flows typically accept `-d` for teardown. After provisioning, the rest of the pipeline (`setupK8s.bash` → `deployScylla.bash`) is identical.
@@ -115,11 +116,15 @@ Nested `.git` directories may appear under some `sample_app/` subtrees — vendo
 
 - **`dbVersion` is pinned in two places.** `init.conf` sets it; `setupK8s.bash:138-143` has a hardcoded fallback for the `ScyllaOperatorConfig.scyllaUtilsImage` when `operatorTag` is outside the 1.2x range, documented as a workaround for the 2025.2 / 2025.3 image bug. Update both together.
 
+- **`gcs-service-account.json` must be non-empty, and every guard tests `-s`, not `-e`.** A failed `gcloud iam service-accounts keys create` leaves a zero-byte file; with `-e` that file selected the GCS path, mounted empty credentials, and produced a misleading `403: Provided scope(s) are not authorized` when Manager validated the backup location — while also making `createServiceAccount.bash` exit early forever, so it could never repair itself. Use `-s` for any new test of this file.
+
+- **The agent secrets are mounted with `subPath`, which Kubernetes never refreshes.** `gcs-service-account` and `${clusterName}-agent-config-secret` reach the agents via `subPath` mounts (`templateCluster.yaml:125` and friends). Rewriting the secret does **nothing** to a running pod. `deployScylla.bash` hashes both secrets before and after writing and rolls the rack StatefulSets only when the content actually changed, so a first deploy and a no-op re-run restart nothing. Anything else that edits these secrets must restart the racks itself.
+
+- **Re-applying the ScyllaCluster can orphan its Manager tasks.** The CR gets a new `owner-uid` and can no longer adopt the task it created previously, so the task goes Degraded with `task name <name> is already used`. The operator also backs off for a long time before retrying a Degraded `ScyllaDBManagerTask` — a task whose root cause was fixed can sit Degraded for the better part of an hour. `remove_stuck_manager_tasks.bash` handles both.
+
 - **The pre-1.19 monitoring template** (`templateDBMonitoring.pre-1.19.yaml`) exists because the CR schema changed in operator 1.19. Don't delete it without verifying the minimum supported operator version.
 
 - **The step symlinks (`_step_1`, `_step_2`) may not exist in every checkout.** Call the underlying scripts by name when in doubt.
-
-- **`makeK8s_EKS/` may have a parallel `test_EKS/` tree** with near-duplicate Terraform; if both exist locally, mirror changes.
 
 ## Reference
 

@@ -60,9 +60,10 @@ kubectl -n minio exec -it $(kubectl get pods --namespace minio -l "v1.min.io/ten
 kubectl -n minio exec -it $(kubectl get pods --namespace minio -l "v1.min.io/tenant=minio" -o name) -c minio \
   -- bash -c 'mc mb s3/scylla-backups --insecure'
 
-# patch the svc - minio seems to work best on port 9000 vs 80
-sleep 10
-kubectl -n minio get svc minio -o yaml | sed -e "s|: 80|: 9000|" | kubectl replace -f -
+# NOTE: service/minio is published on port 80 by the minio operator, and any
+# patch of it is reverted on the next tenant reconcile. Consumers (the agent
+# config in deployScylla.bash, object_storage_endpoints, port_forward.bash)
+# therefore use service/minio-hl, which natively listens on 9000.
 
 else
   printf "✓ Minio is already installed\n"
