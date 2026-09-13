@@ -121,7 +121,13 @@ else
   awss3=""
 fi
 # GKE and backup to GCS
-if [[ -e gcs-service-account.json && ${context} == *gke* ]]; then
+# -s not -e: a zero-byte key file left behind by a failed `gcloud ... keys create`
+# would otherwise select the GCS path and mount empty credentials, which fails at
+# backup time with a confusing "403: Provided scope(s) are not authorized"
+if [[ -e gcs-service-account.json && ! -s gcs-service-account.json ]]; then
+  printf "* * * Warning - gcs-service-account.json is empty - run makeK8s_GKE/createServiceAccount.bash\n" >&2
+fi
+if [[ -s gcs-service-account.json && ${context} == *gke* ]]; then
   gcs=""
   useS3="#"
   awss3="#"
@@ -175,7 +181,7 @@ if [[ ${backupEnabled} == true ]]; then
     ${minio}access_key_id: minio
     ${minio}secret_access_key: minio123
     ${minio}provider: Minio
-    ${minio}endpoint: http://minio.minio:9000
+    ${minio}endpoint: http://minio-hl.minio:9000
     ${minio}no_check_bucket: true
     ${awss3}#access_key_id: ${AWS_ACCESS_KEY_ID:-""}
     ${awss3}#secret_access_key: ${AWS_SECRET_ACCESS_KEY:-""}
@@ -389,7 +395,7 @@ data:
     ${awss3}  port: 443
     ${awss3}  https: true
     ${awss3}  aws_region: ${awsRegion}
-    ${minio}- name: minio.minio
+    ${minio}- name: minio-hl.minio
     ${minio}  port: 9000
     ${minio}  https: false
     ${minio}  aws_region: local
