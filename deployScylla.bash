@@ -98,6 +98,20 @@ printf "Installing the Scylla Cluster using version ${dbVersion}\n"
 printf "Cluster namespace: ${clusterNamespace}, name: ${clusterName}, datacenter: ${dataCenterName}\n"
 
 [[ $( kubectl get ns ${clusterNamespace} 2>/dev/null ) ]] || kubectl create ns ${clusterNamespace}
+
+# Both manager-agent secrets are mounted with subPath, which never receives
+# updates from Kubernetes - changed content only reaches a running agent after
+# the pod restarts. Hash them before and after writing so we know to roll the
+# racks. Prints nothing when the secret does not exist yet.
+secret_hash() {
+  local data
+  data=$( kubectl -n "$1" get secret "$2" -o jsonpath='{.data}' 2>/dev/null )
+  [[ -z ${data} ]] && return 0
+  printf '%s' "${data}" | shasum | awk '{print $1}'
+}
+gcsSecretBefore=""; gcsSecretAfter=""
+agentSecretBefore=""; agentSecretAfter=""
+
 # create a secret to define the backup location
 bak="#BAK "
 gcs="#GCS "
@@ -129,35 +143,35 @@ if [[ ${context} == *gke* && ! -s gcs-service-account.json ]]; then
   printf "* * * Warning - gcs-service-account.json %s - falling back to S3 for backups\n" "${state}" >&2
   printf "* * *           run makeK8s_GKE/createServiceAccount.bash to back up to GCS\n" >&2
 fi
-if [[ -s gcs-service-account.json && ${context} == *gke* ]]; then
+# Zone placement follows the cloud, not the backup configuration. Deriving it
+# from the GCS branch meant a GKE cluster with no key file got AWS zone names
+# in its nodeAffinity, which leaves the pods unschedulable.
+if [[ ${context} == *gke* ]]; then
+  zoneA="${gcpRegion}-a"; zoneB="${gcpRegion}-b"; zoneC="${gcpRegion}-c"
+else
+  zoneA="${awsRegion}a";  zoneB="${awsRegion}b";  zoneC="${awsRegion}c"
+fi
+if [[ ${singleZone} == true ]]; then
+  ZONE1="${zoneA}"; ZONE2="${zoneA}"; ZONE3="${zoneA}"
+else
+  ZONE1="${zoneA}"; ZONE2="${zoneB}"; ZONE3="${zoneC}"
+fi
+
+if [[ ${backupEnabled} == true && ${context} == *gke* && -s gcs-service-account.json ]]; then
   gcs=""
   useS3="#"
   awss3="#"
   minio="#"
-  if [[ ${singleZone} == true ]]; then
-    ZONE1="${gcpRegion}-a"
-    ZONE2="${gcpRegion}-a"
-    ZONE3="${gcpRegion}-a"
-  else
-    ZONE1="${gcpRegion}-a"
-    ZONE2="${gcpRegion}-b"
-    ZONE3="${gcpRegion}-c"
-  fi
-  kubectl -n ${clusterNamespace} delete secret gcs-service-account > /dev/null 2>&1 || true
+  gcsSecretBefore=$( secret_hash ${clusterNamespace} gcs-service-account )
+  # create|apply rather than delete|create: deleting first leaves a window where
+  # a pod scheduled in the gap fails to mount with CreateContainerConfigError
   kubectl -n ${clusterNamespace} create secret generic gcs-service-account \
-    --from-file=gcs-service-account.json=gcs-service-account.json
+    --from-file=gcs-service-account.json=gcs-service-account.json \
+    --dry-run=client -o yaml | kubectl -n ${clusterNamespace} apply --server-side --force-conflicts -f -
+  gcsSecretAfter=$( secret_hash ${clusterNamespace} gcs-service-account )
 else
   useS3=""
   gcs="#"
-  if [[ ${singleZone} == true ]]; then
-    ZONE1="${awsRegion}a"
-    ZONE2="${awsRegion}a"
-    ZONE3="${awsRegion}a"
-  else
-    ZONE1="${awsRegion}a"
-    ZONE2="${awsRegion}b"
-    ZONE3="${awsRegion}c"
-  fi
 fi
 
 # not used with IAM
@@ -169,9 +183,11 @@ if [[ ${backupEnabled} == true ]]; then
   else
     bak="#"
   fi
-  kubectl -n ${clusterNamespace} delete secret ${clusterName}-agent-config-secret > /dev/null 2>&1 || true
   printf "Backup is enabled - Creating a secret to define the backup location\n"
-  kubectl -n ${clusterNamespace} apply --server-side -f - <<EOF
+  agentSecretBefore=$( secret_hash ${clusterNamespace} ${clusterName}-agent-config-secret )
+  # no delete first - apply --server-side is idempotent on its own, and deleting
+  # leaves a window where a pod scheduled in the gap cannot mount the secret
+  kubectl -n ${clusterNamespace} apply --server-side --force-conflicts -f - <<EOF
   apiVersion: v1
   kind: Secret
   metadata:
@@ -194,6 +210,7 @@ if [[ ${backupEnabled} == true ]]; then
   ${gcs}  service_account_file: /etc/scylla-manager-agent/gcs-service-account.json
   " | base64 | tr -d '\n')
 EOF
+  agentSecretAfter=$( secret_hash ${clusterNamespace} ${clusterName}-agent-config-secret )
 fi # end of backupEnabled
 
 if [[ ${customCerts} == true ]]; then
@@ -496,6 +513,19 @@ printf "Waiting for ScyllaCluster/scylla resources to be ready within ${waitPeri
 sleep 3 
 # annotate the service account with the GCP service account email if using GCS for backup on GKE - this is needed for Workload Identity to work and allow the operator to access GCS using the annotated service account
 [[ -s gcs-service-account.json && ${context} == *gke* && -n ${gkeServiceAccount} ]] && kubectl annotate serviceaccount --namespace ${clusterNamespace} ${clusterName}-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite
+
+# The agent secrets are mounted with subPath, so Kubernetes never refreshes them
+# in a running pod - without this a rotated GCS key or a changed backup endpoint
+# is written to the secret and silently ignored by the agents. Only rolls when
+# the content actually changed and the racks already exist, so a first deploy
+# and a no-op re-run do not restart anything.
+if [[ ( -n ${gcsSecretBefore} && ${gcsSecretBefore} != ${gcsSecretAfter} ) ||
+      ( -n ${agentSecretBefore} && ${agentSecretBefore} != ${agentSecretAfter} ) ]]; then
+  if [[ -n $( kubectl -n ${clusterNamespace} get sts -l scylla/cluster=${clusterName} -o name 2>/dev/null ) ]]; then
+    printf "Manager agent credentials changed - restarting the racks to remount the secret\n"
+    kubectl -n ${clusterNamespace} rollout restart sts -l scylla/cluster=${clusterName}
+  fi
+fi
 
 kubectl -n ${clusterNamespace} wait ScyllaCluster/${clusterName} --for=condition=Available=True --timeout=${waitPeriod}
 # Port 10000 is used for the Scylla REST API - patch the service to add this port if not already present
