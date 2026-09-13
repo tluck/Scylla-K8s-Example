@@ -39,6 +39,16 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 gcloud iam service-accounts keys create gcs-service-account.json \
   --iam-account=${gkeServiceAccount}
 
+# A failed `keys create` leaves a zero-byte file behind - never leave one around.
+# That is what made every later run of this script exit early without a key, and
+# what made deployScylla.bash mount empty credentials into the agents.
+if [[ ! -s gcs-service-account.json ]] || ! jq -e '.client_email' gcs-service-account.json > /dev/null 2>&1; then
+  printf "* * * Error - failed to create a usable gcs-service-account.json for %s\n" "${gkeServiceAccount}" >&2
+  rm -f gcs-service-account.json
+  exit 1
+fi
+printf "Created gcs-service-account.json for %s\n" "$(jq -r .client_email gcs-service-account.json)"
+
 # Link the key into the repo root so deployScylla.bash finds it (target is
 # resolved relative to the link's location — the parent dir — hence the prefix)
 ln -sf makeK8s_GKE/gcs-service-account.json ../gcs-service-account.json

@@ -124,8 +124,10 @@ fi
 # -s not -e: a zero-byte key file left behind by a failed `gcloud ... keys create`
 # would otherwise select the GCS path and mount empty credentials, which fails at
 # backup time with a confusing "403: Provided scope(s) are not authorized"
-if [[ -e gcs-service-account.json && ! -s gcs-service-account.json ]]; then
-  printf "* * * Warning - gcs-service-account.json is empty - run makeK8s_GKE/createServiceAccount.bash\n" >&2
+if [[ ${context} == *gke* && ! -s gcs-service-account.json ]]; then
+  [[ -e gcs-service-account.json ]] && state="is empty" || state="is missing"
+  printf "* * * Warning - gcs-service-account.json %s - falling back to S3 for backups\n" "${state}" >&2
+  printf "* * *           run makeK8s_GKE/createServiceAccount.bash to back up to GCS\n" >&2
 fi
 if [[ -s gcs-service-account.json && ${context} == *gke* ]]; then
   gcs=""
@@ -493,7 +495,7 @@ fi
 printf "Waiting for ScyllaCluster/scylla resources to be ready within ${waitPeriod} \n" 
 sleep 3 
 # annotate the service account with the GCP service account email if using GCS for backup on GKE - this is needed for Workload Identity to work and allow the operator to access GCS using the annotated service account
-[[ -e gcs-service-account.json && ${context} == *gke* ]] && kubectl annotate serviceaccount --namespace ${clusterNamespace} ${clusterName}-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite  
+[[ -s gcs-service-account.json && ${context} == *gke* && -n ${gkeServiceAccount} ]] && kubectl annotate serviceaccount --namespace ${clusterNamespace} ${clusterName}-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite
 
 kubectl -n ${clusterNamespace} wait ScyllaCluster/${clusterName} --for=condition=Available=True --timeout=${waitPeriod}
 # Port 10000 is used for the Scylla REST API - patch the service to add this port if not already present
