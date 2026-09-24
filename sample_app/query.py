@@ -56,7 +56,7 @@ class TableQueryRunner:
         self.error_count = 0
         try:
             self.cluster, self.session = build_cluster_and_session(
-                hosts, port, username, password, dc, opts.local_only
+                hosts, port, username, password, dc, opts.local_only, opts.rack
             )
             self.session.set_keyspace(self.keyspace)
             logger.info(f"Connected to cluster: {self.hosts}")

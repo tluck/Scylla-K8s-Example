@@ -142,7 +142,7 @@ def insert_data(session, row_count, table, compression, buckets):
 if __name__ == "__main__":
     try:
         cluster, session = build_cluster_and_session(
-            hosts, port, username, password, local_datacenter, opts.local_only
+            hosts, port, username, password, local_datacenter, opts.local_only, opts.rack
         )
         if drop_keyspace:
             logger.info(f"Dropping keyspace {keyspace} if exists")

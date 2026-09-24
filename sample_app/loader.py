@@ -112,6 +112,7 @@ def _worker_insert_range(
     table,
     dc,
     local_only,
+    rack,
     consistency_level,
     start_id,
     end_id,
@@ -122,7 +123,7 @@ def _worker_insert_range(
     # Per-process RNG
     _init_worker_rng(worker_index)
     fake = Faker()
-    cluster, session = build_cluster_and_session(hosts, port, username, password, dc, local_only)
+    cluster, session = build_cluster_and_session(hosts, port, username, password, dc, local_only, rack)
     try:
         # Prepare statement per worker
         cql = f"""INSERT INTO {keyspace}.{table} (bucket, id, ssn, imei, os, phonenum, balance, pdate, message) VALUES (?,?,?,?,?,?,?,?, ?)"""
@@ -164,6 +165,7 @@ def insert_data_parallel(
     rf,
     dc,
     local_only,
+    rack,
     consistency_level,
     row_count,
     batch_size,
@@ -172,7 +174,7 @@ def insert_data_parallel(
     num_buckets,
 ):
     # One control session in parent to create schema (safe and simple)
-    ctrl_cluster, ctrl_session = build_cluster_and_session(hosts, port, username, password, dc, local_only)
+    ctrl_cluster, ctrl_session = build_cluster_and_session(hosts, port, username, password, dc, local_only, rack)
     try:
         create_schema(ctrl_session, keyspace, table, tablets, compression, rf)
     finally:
@@ -215,6 +217,7 @@ def insert_data_parallel(
                     table=table,
                     dc=dc,
                     local_only=local_only,
+                    rack=rack,
                     consistency_level=consistency_level,
                     start_id=start_id,
                     end_id=end_id,
@@ -258,7 +261,8 @@ def main():
     try:
         if opts.drop:
             # Use ephemeral parent session to drop keyspace to avoid races
-            cluster, session = build_cluster_and_session(hosts, port, username, opts.password, opts.dc, opts.local_only)
+            cluster, session = build_cluster_and_session(hosts, port, username, opts.password, opts.dc,
+                                                         opts.local_only, opts.rack)
             try:
                 logger.info(f"Dropping table {opts.keyspace}.{opts.table} if exists.")
                 session.execute(f"DROP TABLE IF EXISTS {opts.keyspace}.{opts.table};")
@@ -285,6 +289,7 @@ def main():
             rf=opts.rf,
             dc=opts.dc,
             local_only=opts.local_only,
+            rack=opts.rack,
             consistency_level=opts.cl,
             row_count=opts.row_count,
             batch_size=opts.batch_size,

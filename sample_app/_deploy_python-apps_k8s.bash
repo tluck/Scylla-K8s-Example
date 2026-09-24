@@ -44,6 +44,47 @@ else
 #if [[ ${useCache} == true ]]; then
   kubectl -n "${clusterNamespace}" delete pod/"${appName}" --ignore-not-found --wait --timeout=120s
 
+  # AZ awareness. appRack (init.conf) names the ScyllaDB rack the pod should share an
+  # availability zone with; templateCluster.yaml maps rack1/rack2/rack3 to ZONE1/2/3
+  # the same way deployScylla.bash derives them, so repeat that derivation here rather
+  # than guess. The zone nodeAffinity is what actually puts the pod in the AZ; the RACK
+  # env var is what run_app_k8s.bash turns into -z/--rack for the driver. Docker Desktop
+  # has no zone labels, so it gets the env var only - the rack is still a real routing
+  # target there, the pod just is not placed by zone.
+  rackEnv=""
+  zoneAffinity=""
+  if [[ -n ${appRack} ]]; then
+    rackEnv=$(printf '%s\n' \
+      "      env:" \
+      "        - name: RACK" \
+      "          value: \"${appRack}\"")
+
+    if [[ ${context} == *gke* ]]; then
+      zoneA="${gcpRegion}-a"; zoneB="${gcpRegion}-b"; zoneC="${gcpRegion}-c"
+    else
+      zoneA="${awsRegion}a";  zoneB="${awsRegion}b";  zoneC="${awsRegion}c"
+    fi
+    [[ ${singleZone} == true ]] && { zoneB="${zoneA}"; zoneC="${zoneA}"; }
+
+    case ${appRack} in
+      rack1) appZone="${zoneA}" ;;
+      rack2) appZone="${zoneB}" ;;
+      rack3) appZone="${zoneC}" ;;
+      *) printf "* * * Warning - appRack=%s is not rack1/rack2/rack3 - no zone pinning\n" "${appRack}" >&2 ;;
+    esac
+
+    if [[ ${context} == "docker-desktop" ]]; then
+      printf "AZ awareness: RACK=%s (docker-desktop: no zone labels to pin to)\n" "${appRack}"
+    elif [[ -n ${appZone} ]]; then
+      printf "AZ awareness: RACK=%s, scheduling %s in zone %s\n" "${appRack}" "${appName}" "${appZone}"
+      zoneAffinity=$(printf '%s\n' \
+        "          - key: topology.kubernetes.io/zone" \
+        "            operator: In" \
+        "            values:" \
+        "            - ${appZone}")
+    fi
+  fi
+
   # Kubernetes access for the scripts that run inside the pod - see
   # python-k8s-access.yaml for what it grants and why. The only substitution is
   # the ServiceAccount subject, which follows clusterName like the pod's own
@@ -67,6 +108,7 @@ spec:
       name: ${appName}
       imagePullPolicy: Always
       command: ["sleep", "infinity"]
+${rackEnv}
       volumeMounts:
         - mountPath: /dev/shm
           name: devshm
@@ -86,6 +128,7 @@ spec:
             operator: In
             values:
             - ${nodeSelector2}
+${zoneAffinity}
   tolerations:
     - effect: NoSchedule
       key: kubernetes.io/arch

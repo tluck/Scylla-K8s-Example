@@ -12,10 +12,23 @@ Two modes:
                    shard-aware connections. Use this whenever the addresses the
                    nodes advertise are routable from the client, i.e. from inside
                    the k8s cluster or against broadcast addresses you can dial.
+                   With -z/--rack the child policy becomes RackAwareRoundRobinPolicy,
+                   which prefers replicas in the client's own rack (= availability
+                   zone) before the rest of the local DC - see below.
 
   local-only     - everything funnelled through one reachable endpoint. Selected by
                    -l, or implicitly when the first contact point is 127.0.0.1 /
                    localhost, which is the `kubectl port-forward` case.
+
+AZ awareness (-z/--rack) takes the ScyllaDB *rack* name, as `nodetool status` reports
+it - here rack1/rack2/rack3 - not the cloud AZ name. templateCluster.yaml pins each
+rack to one `topology.kubernetes.io/zone` (rack1 -> ZONE1, ...), so the rack of the
+node the client runs on is its AZ. Reads then stay inside that AZ whenever a replica
+lives there, which cuts cross-AZ latency and, on the cloud providers that bill it,
+cross-AZ traffic. It only changes host *preference*: if the local rack holds no
+replica the driver still falls through to the rest of the DC, so nothing breaks when
+the client and the data do not share an AZ. Ignored in local-only mode, where there
+is exactly one endpoint to route to.
 """
 
 import logging
@@ -24,7 +37,8 @@ import sys
 from cassandra.cluster import Cluster, ExecutionProfile, EXEC_PROFILE_DEFAULT
 from cassandra import ConsistencyLevel
 from cassandra.auth import PlainTextAuthProvider
-from cassandra.policies import DCAwareRoundRobinPolicy, TokenAwarePolicy, RoundRobinPolicy, AddressTranslator
+from cassandra.policies import (DCAwareRoundRobinPolicy, RackAwareRoundRobinPolicy, TokenAwarePolicy,
+                                RoundRobinPolicy, AddressTranslator)
 from ssl import SSLContext, TLSVersion, CERT_REQUIRED, PROTOCOL_TLS_CLIENT
 
 CONFIG_DIR = './config'          # where get_certs_k8s.bash drops the TLS material
@@ -68,6 +82,10 @@ def add_connection_args(parser):
     parser.add_argument('-e', '--tls', action="store_true",
                         help='Use tls for connection with username/password')
     parser.add_argument('--dc', default='dc1', help='Local datacenter name for ScyllaDB')
+    parser.add_argument('-z', '--rack', default=os.environ.get('RACK') or None,
+                        help='Local rack name, i.e. the AZ the client runs in (rack1/rack2/rack3, '
+                             'as nodetool status reports it - not the cloud AZ name). Prefers '
+                             'replicas in that rack. Defaults to $RACK; ignored with -l')
     return parser
 
 
@@ -118,12 +136,37 @@ def resolve_connection(opts, log=None):
     return hosts, port, username
 
 
-def build_cluster_and_session(hosts, port, username, password, dc, local_only):
+def log_rack_placement(cluster, dc, rack, log=None):
+    """Report how many nodes back the requested rack, and warn when none do.
+
+    A local_rack that matches no host is not an error to the driver - the local-rack
+    tier of the query plan is simply empty and every host falls through to the
+    datacenter tier, i.e. plain DC-aware routing. That is silent, so say it out loud:
+    it is what passing a cloud AZ name ("us-east-1a") instead of the ScyllaDB rack
+    name ("rack1") looks like.
+    """
+    log = log or logger
+    hosts = [h for h in cluster.metadata.all_hosts() if h.datacenter == dc]
+    racks = sorted({h.rack for h in hosts if h.rack})
+    members = [h for h in hosts if h.rack == rack]
+    if members:
+        log.info(f"Rack-aware: preferring {len(members)} node(s) in {dc}/{rack}; racks in {dc}: {racks}")
+    else:
+        log.warning(f"Rack-aware: no node in {dc} reports rack '{rack}' "
+                    f"(racks in {dc}: {racks or 'none discovered'}) - routing falls back to the "
+                    f"datacenter, and the policy stops rotating once the local-rack tier is empty, "
+                    f"so unrouted queries pile onto one node. "
+                    f"-z takes the ScyllaDB rack name, not the cloud AZ name.")
+
+
+def build_cluster_and_session(hosts, port, username, password, dc, local_only, rack=None):
     """Connect and return (cluster, session). See the module docstring for the two modes."""
     is_local_only = (hosts and hosts[0] in ('127.0.0.1', 'localhost')) or local_only
 
     if is_local_only:
         logger.info(f"Local-only mode: all node addresses translated to {hosts[0]}, no discovery")
+        if rack:
+            logger.warning(f"Ignoring --rack {rack}: local-only mode has a single endpoint to route to")
         policy = RoundRobinPolicy()
         profile = ExecutionProfile(
             load_balancing_policy=policy,
@@ -135,8 +178,12 @@ def build_cluster_and_session(hosts, port, username, password, dc, local_only):
         cc_timeout = 5                         # a forwarded hop needs more than 1s
         md = False                             # no schema/token metadata: one endpoint, no routing to do
     else:
-        logger.info(f"Using TokenAwarePolicy with local_dc: {dc}")
-        policy = TokenAwarePolicy(DCAwareRoundRobinPolicy(local_dc=dc))
+        if rack:
+            logger.info(f"Using TokenAwarePolicy with local_dc: {dc}, local_rack: {rack}")
+            policy = TokenAwarePolicy(RackAwareRoundRobinPolicy(local_dc=dc, local_rack=rack))
+        else:
+            logger.info(f"Using TokenAwarePolicy with local_dc: {dc}")
+            policy = TokenAwarePolicy(DCAwareRoundRobinPolicy(local_dc=dc))
         profile = ExecutionProfile(
             load_balancing_policy=policy,
             request_timeout=30,
@@ -182,9 +229,12 @@ def build_cluster_and_session(hosts, port, username, password, dc, local_only):
         common_kwargs['auth_provider'] = PlainTextAuthProvider(username=username, password=password)
 
     cluster = Cluster(**common_kwargs)
-    logger.info(f"Connecting: hosts={hosts}, port={port}, auth={username}, local_only={is_local_only}")
+    logger.info(f"Connecting: hosts={hosts}, port={port}, auth={username}, "
+                f"local_only={is_local_only}, rack={rack or '-'}")
     session = cluster.connect()
     logger.info("Session created successfully")
+    if rack and not is_local_only:
+        log_rack_placement(cluster, dc, rack)   # host metadata is populated by connect()
     return cluster, session
 
 

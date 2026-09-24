@@ -88,7 +88,7 @@ if __name__ == "__main__":
     table = [ "myTable" ]
     compression = [ "'sstable_compression': 'ZstdCompressor'" ]
     cluster, session = build_cluster_and_session(
-        hosts, port, username, password, opts.dc, opts.local_only
+        hosts, port, username, password, opts.dc, opts.local_only, opts.rack
     )
     numtable= len(table) 
     for i in range(numtable):
