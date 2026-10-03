@@ -49,6 +49,12 @@ variable "region" {
   default     = "us-west-2"
 }
 
+variable "aws_profile" {
+  description = "AWS_PROFILE used to build the cluster - only used in the kubectl_config_cmd output"
+  type        = string
+  default     = ""
+}
+
 variable "eks_cluster_version" {
   description = "AWS eks cluster version"
   type        = string

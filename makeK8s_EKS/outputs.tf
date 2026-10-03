@@ -35,5 +35,5 @@ output "sshKey" {
 }
 
 output "kubectl_config_cmd" {
-  value = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.cluster_name}"
+  value = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.cluster_name}${var.aws_profile != "" ? " --profile ${var.aws_profile}" : ""}"
 }

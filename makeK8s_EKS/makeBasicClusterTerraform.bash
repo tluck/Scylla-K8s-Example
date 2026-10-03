@@ -18,6 +18,13 @@ fi
 
 verb=${1:-"apply -auto-approve"}
 
+# confirm which AWS account we are about to use - also catches expired gimme-aws-creds sessions
+if ! awsAccount=$(aws sts get-caller-identity --query Account --output text); then
+    printf "AWS credentials for profile '%s' are missing or expired - run: gimme-aws-creds --profile %s\n" "${AWS_PROFILE:-default}" "${AWS_PROFILE:-<profile>}"
+    exit 1
+fi
+printf "Using AWS profile '%s' (account %s)\n" "${AWS_PROFILE:-default}" "${awsAccount}"
+
 #instance="${instance0:-m5a.2xlarge}" # "i3en.2xlarge"
 mountPath=${1:-${mountPath}}
 
@@ -35,8 +42,6 @@ else
     if [[ ! -e .terraform ]]; then
         printf "%s\n" "No .terraform directory found, running terraform init"
         terraform init
-        # fixes a bug
-        ./fix_tf.bash
     fi
     printf "%s\n" "Running terraform ${verb}"
     terraform ${verb} \
@@ -47,6 +52,7 @@ else
         -var=ng_1_size=${nodeGroup1size} \
         -var=ng_2_size=${nodeGroup2size} \
         -var="region=${region}" \
+        -var="aws_profile=${AWS_PROFILE}" \
         -var="arch=${arch}" \
         -var="instance0=${instance0}" \
         -var="instance1=${instance1}" \
@@ -64,7 +70,8 @@ else
     region=$(terraform output -raw region)
     clusterName=$(terraform output -raw eks_cluster_name)
     printf "Making the kubeconfig for the new cluster\n"
-    aws --region ${region} eks update-kubeconfig --name ${clusterName}
+    # --profile pins AWS_PROFILE into the kubeconfig so kubectl keeps using this account from any shell
+    aws --region ${region} eks update-kubeconfig --name ${clusterName} ${AWS_PROFILE:+--profile ${AWS_PROFILE}}
     printf "Making gp2 the default storage class\n"
     kubectl patch storageclass gp2 -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 
