@@ -74,8 +74,9 @@ Underlying Kubernetes provisioning lives in sibling trees — **not** in `setupK
 
 - **`makeK8s_GKE/`** — `makeBasicCluster.bash`, plus `create_second_pool.bash` for a second nodepool. `createServiceAccount.bash` creates the `gke-sa` GCP service account, grants it the bucket roles, and mints a JSON key to `gcs-service-account.json` (symlinked into the repo root). **The credentials that actually reach the agents are that key file** — `deployScylla.bash` puts it in the `gcs-service-account` secret, which `templateCluster.yaml` mounts at `/etc/scylla-manager-agent/gcs-service-account.json`. `deployScylla.bash` also applies the `iam.gke.io/gcp-service-account` Workload Identity annotation to the member ServiceAccount, but nothing depends on it while the key file is mounted; treat the key file as the authoritative mechanism.
 - **`makeK8s_EKS/`** — Terraform (`eks.tf.v6` / `eks.tf.v5`, `variables.tf`); driven by `makeBasicClusterTerraform.bash`. Also has `create_cluster_eksctl.bash` (alternative path) and `nodeadm.bash` / `nodeconfig.bash` for in-place node tuning.
+- **`makeK8s_OKE/`** — OCI CLI provisioning driven by `makeBasicCluster.bash`. It creates the VCN/networking, an OKE Enhanced Cluster, a system pool, a Dense I/O ScyllaDB pool spread across OCI fault domains, and an optional application pool. The generated context ends in `-oke`; `setupK8s.bash` selects `local-csi-driver/nodeconfigOKE.yaml`, and monitoring/Manager use `oci-bv`. OKE backups deliberately default to in-cluster MinIO because OCI Object Storage is not in ScyllaDB Manager's documented S3 provider list.
 
-Both flows typically accept `-d` for teardown. After provisioning, the rest of the pipeline (`setupK8s.bash` → `deployScylla.bash`) is identical.
+All flows typically accept `-d` for teardown. After provisioning, the rest of the pipeline (`setupK8s.bash` → `deployScylla.bash`) is identical.
 
 ## Sample apps (`sample_app/`)
 

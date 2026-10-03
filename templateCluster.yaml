@@ -74,7 +74,7 @@ spec:
                       operator: In
                       values:
                         - NODESELECTOR
-                    #CLOUD - key: topology.kubernetes.io/zone
+                    #CLOUD - key: TOPOLOGYKEY
                     #CLOUD   operator: In
                     #CLOUD   values:
                     #CLOUD   - ZONE1
@@ -145,7 +145,7 @@ spec:
                       operator: In
                       values:
                         - NODESELECTOR
-                    #CLOUD - key: topology.kubernetes.io/zone
+                    #CLOUD - key: TOPOLOGYKEY
                     #CLOUD   operator: In
                     #CLOUD   values:
                     #CLOUD   - ZONE2
@@ -215,7 +215,7 @@ spec:
                       operator: In
                       values:
                         - NODESELECTOR
-                    #CLOUD - key: topology.kubernetes.io/zone
+                    #CLOUD - key: TOPOLOGYKEY
                     #CLOUD   operator: In
                     #CLOUD   values:
                     #CLOUD   - ZONE3

@@ -66,7 +66,7 @@ racks:
     # Name of additional scylla manager agent config stored as secret
     scyllaAgentConfig: scylla-agent-config-secret
     # Number of rack members (nodes)
-    members: ${members}
+    members: MEMBERS
     # Storage definition
     storage:
       storageClassName: scylladb-local-xfs
@@ -87,6 +87,10 @@ racks:
                   operator: In
                   values:
                     - NODESELECTOR
+                #CLOUD - key: TOPOLOGYKEY
+                #CLOUD   operator: In
+                #CLOUD   values:
+                #CLOUD   - ZONE1
       #PROD podAntiAffinity: 
       #PROD   preferredDuringSchedulingIgnoredDuringExecution:
       #PROD     - weight: 100
@@ -124,7 +128,7 @@ racks:
     # Name of additional scylla manager agent config stored as secret
     scyllaAgentConfig: scylla-agent-config-secret
     # Number of rack members (nodes)
-    members: ${members}
+    members: MEMBERS
     # Storage definition
     storage:
       storageClassName: scylladb-local-xfs
@@ -145,6 +149,10 @@ racks:
                   operator: In
                   values:
                     - NODESELECTOR
+                #CLOUD - key: TOPOLOGYKEY
+                #CLOUD   operator: In
+                #CLOUD   values:
+                #CLOUD   - ZONE2
       #PROD podAntiAffinity: 
       #PROD   preferredDuringSchedulingIgnoredDuringExecution:
       #PROD     - weight: 100
@@ -182,7 +190,7 @@ racks:
     # Name of additional scylla manager agent config stored as secret
     scyllaAgentConfig: scylla-agent-config-secret
     # Number of rack members (nodes)
-    members: ${members}
+    members: MEMBERS
     # Storage definition
     storage:
       storageClassName: scylladb-local-xfs
@@ -203,6 +211,10 @@ racks:
                   operator: In
                   values:
                     - NODESELECTOR
+                #CLOUD - key: TOPOLOGYKEY
+                #CLOUD   operator: In
+                #CLOUD   values:
+                #CLOUD   - ZONE3
       #PROD podAntiAffinity: 
       #PROD   preferredDuringSchedulingIgnoredDuringExecution:
       #PROD     - weight: 100

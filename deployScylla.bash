@@ -88,6 +88,7 @@ fi
 issuerName="${clusterName}-server-issuer"
 
 printf "Using context: ${context}\n"
+printf "Detected platform: ${cloudProvider}\n"
 if ! kubectl get sc -o name | grep -q xfs; then
     printf "\n* * * Error - Missing storage class - run setupK8s.bash\n" >&2
     exit 1
@@ -116,8 +117,8 @@ agentSecretBefore=""; agentSecretAfter=""
 bak="#BAK "
 gcs="#GCS "
 # set developerMode to true for docker-desktop (not actually using XFS)
-[[ ${context} == *docker-desktop* ]] && cloud="#CLOUD "  || cloud=""
-if [[ ${context} == *docker-desktop* || ${developerMode} == true ]]; then 
+[[ ${cloudProvider} == "docker" ]] && cloud="#CLOUD " || cloud=""
+if [[ ${cloudProvider} == "docker" || ${developerMode} == true ]]; then
   developerMode=true
   dev=""
   prod="#PROD "
@@ -134,30 +135,43 @@ if [[ $minioEnabled == true ]]; then
 else
   awss3=""
 fi
+if [[ ${cloudProvider} == "oke" && ${backupEnabled} == true && ${minioEnabled} != true ]]; then
+  printf "* * * Error: OKE backups require minioEnabled=true\n" >&2
+  printf "* * *        OCI Object Storage is not a supported ScyllaDB Manager S3 provider\n" >&2
+  exit 1
+fi
 # GKE and backup to GCS
 # -s not -e: a zero-byte key file left behind by a failed `gcloud ... keys create`
 # would otherwise select the GCS path and mount empty credentials, which fails at
 # backup time with a confusing "403: Provided scope(s) are not authorized"
-if [[ ${context} == *gke* && ! -s gcs-service-account.json ]]; then
+if [[ ${cloudProvider} == "gke" && ! -s gcs-service-account.json ]]; then
   [[ -e gcs-service-account.json ]] && state="is empty" || state="is missing"
   printf "* * * Warning - gcs-service-account.json %s - falling back to S3 for backups\n" "${state}" >&2
   printf "* * *           run makeK8s_GKE/createServiceAccount.bash to back up to GCS\n" >&2
 fi
-# Zone placement follows the cloud, not the backup configuration. Deriving it
-# from the GCS branch meant a GKE cluster with no key file got AWS zone names
-# in its nodeAffinity, which leaves the pods unschedulable.
-if [[ ${context} == *gke* ]]; then
-  zoneA="${gcpRegion}-a"; zoneB="${gcpRegion}-b"; zoneC="${gcpRegion}-c"
-else
-  zoneA="${awsRegion}a";  zoneB="${awsRegion}b";  zoneC="${awsRegion}c"
-fi
-if [[ ${singleZone} == true ]]; then
+# Rack placement follows each provider's topology labels, independently from
+# backup configuration. OKE places its three racks in fault domains within a
+# single availability domain, matching the OKE provisioning flow.
+topologyKey="topology.kubernetes.io/zone"
+case "${cloudProvider}" in
+  gke)
+    zoneA="${gcpRegion}-a"; zoneB="${gcpRegion}-b"; zoneC="${gcpRegion}-c"
+    ;;
+  oke)
+    topologyKey="oci.oraclecloud.com/fault-domain"
+    zoneA="FAULT-DOMAIN-1"; zoneB="FAULT-DOMAIN-2"; zoneC="FAULT-DOMAIN-3"
+    ;;
+  *)
+    zoneA="${awsRegion}a"; zoneB="${awsRegion}b"; zoneC="${awsRegion}c"
+    ;;
+esac
+if [[ ${singleZone} == true && ${cloudProvider} != "oke" ]]; then
   ZONE1="${zoneA}"; ZONE2="${zoneA}"; ZONE3="${zoneA}"
 else
   ZONE1="${zoneA}"; ZONE2="${zoneB}"; ZONE3="${zoneC}"
 fi
 
-if [[ ${backupEnabled} == true && ${context} == *gke* && -s gcs-service-account.json ]]; then
+if [[ ${backupEnabled} == true && ${cloudProvider} == "gke" && -s gcs-service-account.json ]]; then
   gcs=""
   useS3="#"
   awss3="#"
@@ -466,7 +480,7 @@ fi
 #
 [[ ${dataCenterName} == "dc2" ]] && mdc="" || mdc="#MDC "
 yaml=${clusterNamespace}-${clusterName}.ScyllaCluster.yaml
-cat ${templateFile} | sed \
+if ! cat ${templateFile} | sed \
     -e "s|NAMESPACE|${clusterNamespace}|g" \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|DBVERSION|${dbVersion}|g" \
@@ -484,6 +498,7 @@ cat ${templateFile} | sed \
     -e "s|#MDC |${mdc}|g" \
     -e "s|#ALT |${alt}|g" \
     -e "s|#CLOUD |${cloud}|g" \
+    -e "s|TOPOLOGYKEY|${topologyKey}|g" \
     -e "s|ZONE1|${ZONE1}|g" \
     -e "s|ZONE2|${ZONE2}|g" \
     -e "s|ZONE3|${ZONE3}|g" \
@@ -501,18 +516,31 @@ cat ${templateFile} | sed \
     -e "s|BROADCASTCLIENTSTYPE|${broadcastClientsType}|g" \
     -e "s|NODESERVICETYPE|${nodeServiceType}|g" \
     -e "s|NODESELECTOR|${nodeSelector1}|g" \
-    > ${yaml}
+    > ${yaml}; then
+  printf "* * * Error: could not render %s for platform %s\n" "${yaml}" "${cloudProvider}" >&2
+  exit 1
+fi
+if grep -Eq 'TOPOLOGYKEY|ZONE[123]|MEMBERS|NODESELECTOR' "${yaml}"; then
+  printf "* * * Error: unresolved template token in %s\n" "${yaml}" >&2
+  exit 1
+fi
 if [[ ${helmEnabled} == true ]]; then
-  helm install scylla scylla/scylla --create-namespace --namespace ${clusterNamespace} -f ${yaml}
+  if ! helm upgrade --install scylla scylla/scylla --create-namespace --namespace ${clusterNamespace} -f ${yaml}; then
+    printf "* * * Error: Helm could not apply the Scylla cluster\n" >&2
+    exit 1
+  fi
 else
-  kubectl -n ${clusterNamespace} apply -f ${yaml}
+  if ! kubectl -n ${clusterNamespace} apply -f ${yaml}; then
+    printf "* * * Error: kubectl could not apply the Scylla cluster\n" >&2
+    exit 1
+  fi
 fi
 
 # wait
 printf "Waiting for ScyllaCluster/scylla resources to be ready within ${waitPeriod} \n" 
 sleep 3 
 # annotate the service account with the GCP service account email if using GCS for backup on GKE - this is needed for Workload Identity to work and allow the operator to access GCS using the annotated service account
-[[ -s gcs-service-account.json && ${context} == *gke* && -n ${gkeServiceAccount} ]] && kubectl annotate serviceaccount --namespace ${clusterNamespace} ${clusterName}-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite
+[[ -s gcs-service-account.json && ${cloudProvider} == "gke" && -n ${gkeServiceAccount} ]] && kubectl annotate serviceaccount --namespace ${clusterNamespace} ${clusterName}-member iam.gke.io/gcp-service-account=${gkeServiceAccount} --overwrite
 
 # The agent secrets are mounted with subPath, so Kubernetes never refreshes them
 # in a running pod - without this a rotated GCS key or a changed backup endpoint
@@ -587,20 +615,49 @@ if [[ ${clusterOnly} == true ]]; then
 fi
 
 # if [[ ${helmEnabled} == false ]]; then
-[[ ${context} == *eks* ]] && defaultStorageClass="gp2" || defaultStorageClass="standard"
+case "${cloudProvider}" in
+  eks) defaultStorageClass="gp2" ;;
+  oke) defaultStorageClass="oci-bv" ;;
+  *)   defaultStorageClass="standard" ;;
+esac
+prometheusStorage=""
+if [[ ${cloudProvider} == "oke" ]]; then
+  prometheusStorage=$(cat <<EOF
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: ${defaultStorageClass}
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: ${monitoringCapacity}
+EOF
+)
+fi
 # Install the monitor resource
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Creating the ScyllaDBMonitoring resources for cluster: ${clusterName}\n"
 [[ $( kubectl get ns ${clusterNamespace} 2>/dev/null ) ]] || kubectl create ns ${clusterNamespace}
 yaml=${clusterNamespace}-${clusterName}.ScyllaDBMonitoring.yaml
-cat templateDBMonitoring.yaml | sed \
+if ! sed \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|NAMESPACE|${clusterNamespace}|g" \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     -e "s|MONITORCAPACITY|${monitoringCapacity}|g" \
     -e "s|NODESELECTOR|${nodeSelector0}|g" \
-    > ${yaml}
-kubectl -n ${clusterNamespace} apply --server-side -f ${yaml}
+    templateDBMonitoring.yaml > ${yaml}; then
+  printf "* * * Error: could not render %s\n" "${yaml}" >&2
+  exit 1
+fi
+if grep -Eq 'CLUSTERNAME|NAMESPACE|STORAGECLASS|MONITORCAPACITY|NODESELECTOR' "${yaml}"; then
+  printf "* * * Error: unresolved monitoring template token in %s\n" "${yaml}" >&2
+  exit 1
+fi
+if ! kubectl -n ${clusterNamespace} apply --server-side -f ${yaml}; then
+  printf "* * * Error: could not apply %s\n" "${yaml}" >&2
+  exit 1
+fi
 # fi
 
 sleep 5
@@ -687,6 +744,7 @@ spec:
     runAsNonRoot: true
     runAsUser: 65534
     fsGroup: 65534
+${prometheusStorage}
   web:
     pageTitle: "ScyllaDB Prometheus"
 # [selectors]
@@ -814,7 +872,7 @@ fi
 
 kubectl -n ${scyllaManagerNamespace} delete configmap scylla-manager-config > /dev/null 2>&1 || true
 yaml=${clusterNamespace}-${clusterName}.ScyllaManager.yaml
-cat ${templateFile} | sed \
+if ! sed \
     -e "s|NAMESPACE|${scyllaManagerNamespace}|g" \
     -e "s|DBVERSION|${dbVersion}|g" \
     -e "s|DEVMODE|${developerMode}|g" \
@@ -833,11 +891,24 @@ cat ${templateFile} | sed \
     -e "s|#PROD |${prod}|g" \
     -e "s|CLUSTERNAME|${clusterName}|g" \
     -e "s|#CUSTC |${certAuth}|g" \
-    > ${yaml}
+    ${templateFile} > ${yaml}; then
+  printf "* * * Error: could not render %s\n" "${yaml}" >&2
+  exit 1
+fi
+if grep -Eq 'NAMESPACE|DBVERSION|DEVMODE|AGENTVERSION|DATACENTER|MANAGERVERSION|MANAGER(CPU|MEMORY|MEMBERS|DB)|STORAGECLASS|NODESELECTOR|CLUSTERNAME' "${yaml}"; then
+  printf "* * * Error: unresolved Manager template token in %s\n" "${yaml}" >&2
+  exit 1
+fi
 if [[ ${helmEnabled} == true ]]; then
-  helm install scylla-manager scylla/scylla-manager --create-namespace --namespace ${scyllaManagerNamespace} -f ${yaml}
+  if ! helm upgrade --install scylla-manager scylla/scylla-manager --create-namespace --namespace ${scyllaManagerNamespace} -f ${yaml}; then
+    printf "* * * Error: Helm could not apply Scylla Manager\n" >&2
+    exit 1
+  fi
 else
-  kubectl -n ${scyllaManagerNamespace} apply --server-side -f ${yaml}
+  if ! kubectl -n ${scyllaManagerNamespace} apply --server-side -f ${yaml}; then
+    printf "* * * Error: kubectl could not apply Scylla Manager\n" >&2
+    exit 1
+  fi
 fi
 # wait for the scylla-manager deployment to be ready
 kubectl -n ${scyllaManagerNamespace} wait deployment/scylla-manager --for=condition=Available=True --timeout=${waitPeriod}

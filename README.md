@@ -14,17 +14,36 @@ Install these tools in addition to this repository:
 - [Helm](https://helm.sh/) — for installing operators and optional chart-based Scylla resources.
 - `kubectl` — for applying manifests and managing resources.
 - `jq` — for JSON processing (used during teardown and patches).
+- OCI CLI — required only for provisioning Oracle Kubernetes Engine (OKE).
 - Network access to pull Helm charts and container images (for example from Docker Hub and chart repositories).
 
 ### TL;DR
 
-1. For GKE, run `./makeK8s_GKE/makeBasicCluster.bash`. For EKS, run `./makeK8s_EKS/makeBasicClusterTerraform.bash`.
+1. Provision Kubernetes: GKE with `./makeK8s_GKE/makeBasicCluster.bash`, EKS with `./makeK8s_EKS/makeBasicClusterTerraform.bash`, or OKE with `./makeK8s_OKE/makeBasicCluster.bash`.
 2. Run `./setupK8s.bash` — installs cert-manager, monitoring stack operator dependencies, Scylla Operator, local storage, and optional MinIO.
 3. Edit `init.conf` as needed, then run `./deployScylla.bash` — deploys the Scylla cluster, ScyllaDB Monitoring, Scylla Manager, and optional port-forwards.
 
 Some environments use convenience symlinks `./_step_1` → `setupK8s.bash` and `./_step_2` → `deployScylla.bash`; if those links are not present, invoke the scripts by name as above.
 
 These flows assume node tuning (for example kubelet CPU manager policy) is applied as part of your cluster provisioning scripts where required.
+
+---
+
+## Oracle Kubernetes Engine (OKE)
+
+The OKE flow follows the ScyllaDB Operator OKE reference architecture and uses the OCI CLI rather than introducing another infrastructure toolchain. It creates a VCN, public control-plane and load-balancer subnets, a private worker/pod subnet, an OKE Enhanced Cluster with VCN-native pod networking, and separate system, Dense I/O ScyllaDB, and optional application node pools.
+
+```bash
+cp makeK8s_OKE/oke.conf.example makeK8s_OKE/oke.conf
+$EDITOR makeK8s_OKE/oke.conf
+./makeK8s_OKE/makeBasicCluster.bash
+./setupK8s.bash
+./deployScylla.bash
+```
+
+The provisioning script enables static CPU management on the dedicated nodes, adds the repository's node labels and taints, configures kubeconfig, and names the context `${OKE_CLUSTER_NAME}-oke`. `setupK8s.bash` then uses the OKE-specific NodeConfig to RAID and format Dense I/O local NVMe storage as XFS. `deployScylla.bash` places one rack in each OCI fault domain and uses `oci-bv` for monitoring and Manager PVCs.
+
+For configuration, security defaults, and teardown instructions, see [`makeK8s_OKE/README.md`](makeK8s_OKE/README.md).
 
 ---
 
@@ -36,7 +55,7 @@ These flows assume node tuning (for example kubelet CPU manager policy) is appli
 - **Features:** `backupEnabled`, `minioEnabled`, `enableAlternator`, `enableAuth`, `enableTLS`, `mTLS`, `customCerts`, `encryptionAtRest`, `writeIsolation`.
   - **`encryptionAtRest`** (Enterprise) — encrypts system data and all user tables at rest using a **locally-generated key** (`LocalFileSystemKeyProviderFactory`), no cloud KMS. On the first deploy `deployScylla.bash` generates `encryption_keys/system_key`, stores it as the `${clusterName}-encryption-key` secret, and mounts it into every Scylla pod at `/etc/scylla/encryption_keys/`; later deploys reuse the same key (from the local file, or recovered from the existing secret). Requires `enableAuth=true` and `helmEnabled=false` (it rides the custom `scylla.yaml` ConfigMap path). **Back up `encryption_keys/system_key` — losing it makes the encrypted data unrecoverable.**
 - **Versions:** `operatorTag`, `dbVersion`, `managerVersion`, `agentVersion`, `prometheusVersion`.
-- **Topology:** `clusterName`, `dataCenterName`, `clusterNamespace`, `externalSeeds` (multi-DC), node selectors, `members` (nodes per rack), capacities, and limits — often adjusted per `kubectl` context (`docker-desktop`, `gke`, `eks`, etc.).
+- **Platform and topology:** `cloudProvider` (normally inferred from the current context), `clusterName`, `dataCenterName`, `clusterNamespace`, `externalSeeds` (multi-DC), node selectors, `members` (nodes per rack), capacities, and limits — adjusted per `kubectl` context (`docker-desktop`, `gke`, `eks`, `oke`, etc.).
 
 ---
 
@@ -57,7 +76,7 @@ Run from the `k8s` directory (same directory as `init.conf`).
 7. **ScyllaOperatorConfig** — Applies a `ScyllaOperatorConfig` named `cluster` setting `scyllaUtilsImage` to `docker.io/scylladb/scylla:${dbVersion}` (aligned with your DB image tag).
 8. **Local storage for Scylla**
   - **Docker / local:** Creates `StorageClass` `scylladb-local-xfs` using `rancher.io/local-path`.
-  - **Cloud (non-Docker):** Renders `local-csi-driver/nodeconfig.yaml` from `nodeconfigTemplate.yaml` (EKS vs non-EKS), applies NodeConfig, applies the local CSI driver manifest set under `local-csi-driver/`, waits for the driver DaemonSet.
+  - **Cloud (non-Docker):** Renders `local-csi-driver/nodeconfig.yaml` from `nodeconfigTemplate.yaml` (EKS vs non-EKS), or uses `nodeconfigOKE.yaml` on OKE; applies NodeConfig, applies the local CSI driver manifest set under `local-csi-driver/`, and waits for the driver DaemonSet.
 9. **MinIO** — If `minioEnabled=true`, runs `./deployMinio.bash`.
 
 ### Teardown flags
@@ -91,7 +110,7 @@ Run from the `k8s` directory after `setupK8s.bash` has created the `scylladb-loc
 
 1. **Preflight** — Verifies a storage class containing `xfs` exists (expects prior `setupK8s.bash`).
 2. **Namespace** — Ensures `clusterNamespace` exists.
-3. **Backup agent secret** — If `backupEnabled`, creates `${clusterName}-agent-config-secret` with S3, MinIO, or GCS settings depending on context and `minioEnabled` / `gcs-service-account.json`.
+3. **Backup agent secret** — If `backupEnabled`, creates `${clusterName}-agent-config-secret` with S3, MinIO, or GCS settings depending on platform and `minioEnabled` / `gcs-service-account.json`. OKE defaults to MinIO because OCI Object Storage is not a documented ScyllaDB Manager S3 provider.
 4. **TLS** — Optional custom server issuers/certificates (`customCerts`), client ClusterIssuer and certificates for `mTLS` or custom client TLS.
 5. **Scylla configuration** — When `enableAuth` is true and `helmEnabled` is false, applies a ConfigMap `${clusterName}-config` with `scylla.yaml` (auth, TLS, Alternator, optional object storage endpoints, etc.).
 6. **ScyllaCluster** — Renders `templateClusterHelm.yaml` or `templateCluster.yaml` to a namespaced YAML and applies via Helm or `kubectl`. Supports multi-DC via `externalSeeds` when not `dc1`.
@@ -132,6 +151,8 @@ sctool backup --name="hourly_backup" --cluster="region1/scylla" --location='s3:s
 ```
 
 For GKE backups to GCS, provide `gcs-service-account.json` and configure buckets as in `init.conf`.
+
+For OKE, backups use MinIO by default. OCI Object Storage exposes an S3 Compatibility API, but OCI is not in ScyllaDB Manager's documented provider list; this example deliberately does not configure it as though it were natively supported.
 
 ---
 

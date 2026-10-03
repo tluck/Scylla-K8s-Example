@@ -1,0 +1,83 @@
+# Required OCI target. Copy this file to oke.conf and replace these values.
+OCI_REGION="us-sanjose-1"
+OCI_COMPARTMENT_OCID="ocid1.compartment.oc1..replace-me"
+
+# OCI CLI profile and resource names.
+OCI_CLI_PROFILE="DEFAULT"
+OKE_CLUSTER_NAME="scylladb-demo"
+OKE_VCN_NAME="${OKE_CLUSTER_NAME}-vcn"
+
+# Leave empty to use the newest Kubernetes version supported by OKE in the region.
+K8S_VERSION=""
+# Leave empty to use the first availability domain returned for the compartment.
+OCI_AD=""
+
+# General-purpose pool for the operator, monitoring, Manager, and MinIO.
+GENERAL_NODE_SHAPE="VM.Standard.E4.Flex"
+GENERAL_NODE_OCPUS=4
+GENERAL_NODE_MEMORY_GBS=32
+GENERAL_NODE_COUNT=1
+GENERAL_NODE_ARCH="X86_64"
+# Optional OKE image OCID override. Empty selects the newest non-GPU OL8 image
+# returned for this Kubernetes version/architecture and validates the shape.
+GENERAL_NODE_IMAGE_OCID=""
+
+# Dedicated ScyllaDB pool. Dense I/O shapes provide the local NVMe devices
+# consumed by local-csi-driver/nodeconfigOKE.yaml. VM.DenseIO2.8 is a fixed
+# x86 shape; the OCPU/memory values below are ignored for non-Flex shapes.
+SCYLLA_NODE_SHAPE="VM.DenseIO2.8"
+SCYLLA_NODE_OCPUS=8
+SCYLLA_NODE_MEMORY_GBS=128
+# The repository deploys three one-member racks, one per OCI fault domain.
+SCYLLA_NODE_COUNT=3
+SCYLLA_NODE_ARCH="X86_64"
+SCYLLA_NODE_IMAGE_OCID=""
+# Leave empty to use OCI_AD. A separate value allows Scylla placement in
+# another availability domain without moving the general-purpose pool.
+SCYLLA_NODE_AD=""
+# All three distinct fault domains are required; the script rejects a reduced
+# list because the repository deploys one Scylla rack per fault domain.
+SCYLLA_NODE_FAULT_DOMAINS_JSON='["FAULT-DOMAIN-1","FAULT-DOMAIN-2","FAULT-DOMAIN-3"]'
+# The script automatically checks dense-io2-core-count at 8 units per node for
+# VM.DenseIO2.8 and refuses to create a partial pool when fewer than 24 units
+# are available. DenseIO.E4 and DenseIO.E5 shapes are also mapped to their OCI
+# core limits automatically. For any other family, set that family's OCI limit
+# name and units consumed per node so the same preflight can run.
+# SCYLLA_NODE_LIMIT_NAME="dense-io2-core-count"
+# SCYLLA_NODE_LIMIT_UNITS_PER_NODE=8
+#
+# Example regional fallback when live OKE options and limit availability show
+# VM.DenseIO.E5.Flex with at least 24 dense-io-e5-core-count units:
+# OCI_REGION="us-phoenix-1"
+# SCYLLA_NODE_SHAPE="VM.DenseIO.E5.Flex"
+# SCYLLA_NODE_OCPUS=8
+# SCYLLA_NODE_MEMORY_GBS=96
+
+# Optional x86 application pool, matching nodeSelector2=application in init.conf.
+CREATE_APPLICATION_POOL=false
+APPLICATION_NODE_SHAPE="VM.Standard.E4.Flex"
+APPLICATION_NODE_OCPUS=2
+APPLICATION_NODE_MEMORY_GBS=16
+APPLICATION_NODE_COUNT=1
+APPLICATION_NODE_ARCH="X86_64"
+APPLICATION_NODE_IMAGE_OCID=""
+
+NODE_BOOT_VOLUME_GBS=100
+
+# The provisioning flow creates a new VCN. Change these if they overlap with
+# networks connected to this VCN.
+VCN_CIDR="10.0.0.0/16"
+CONTROL_PLANE_SUBNET_CIDR="10.0.0.0/24"
+WORKER_SUBNET_CIDR="10.0.1.0/24"
+LOAD_BALANCER_SUBNET_CIDR="10.0.2.0/24"
+
+# Public API and load-balancer ingress. Restrict these CIDRs for production.
+API_INGRESS_CIDR="0.0.0.0/0"
+LOAD_BALANCER_INGRESS_CIDR="0.0.0.0/0"
+
+# Optional lifecycle wait tuning. The defaults retry OCI discovery 6 times at
+# 10-second intervals and allow delete operations up to 30 minutes.
+# OKE_DISCOVERY_RETRY_ATTEMPTS=6
+# OKE_DISCOVERY_RETRY_DELAY_SECONDS=10
+# OKE_DELETE_MAX_WAIT_SECONDS=1800
+# OKE_DELETE_WAIT_INTERVAL_SECONDS=30

@@ -62,10 +62,14 @@ encryption_keys/
 # Project-specific
 NU
 test*
+!makeK8s_OKE/tests/
+!makeK8s_OKE/tests/test_image_selection.bash
+!makeK8s_OKE/tests/test_lifecycle.bash
 *dc1*
 my*
 docker-compose*
 gcs-service-account.json
+makeK8s_OKE/oke.conf
 scylla*.yaml
 nodeconfig.yaml
 gcp_init.conf

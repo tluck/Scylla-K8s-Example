@@ -9,8 +9,7 @@ if [[ ! -e init.conf ]]; then
   printf "* * * Error: init.conf not found in %s — run from the repo root\n" "$PWD" >&2
   exit 1
 else
-  source init.conf
-  if [[ $rc -ne 0 ]]; then
+  if ! source init.conf; then
     printf "* * * Error: sourcing init.conf\n" >&2
     exit 1
   fi
@@ -51,6 +50,12 @@ if [[ ${1:-} == '-d' || ${1:-} == '-x' ]]; then
 else
 
 printf "Using context: ${context}\n"
+printf "Detected platform: ${cloudProvider}\n"
+if [[ ${cloudProvider} == "oke" ]] && ! kubectl get storageclass oci-bv > /dev/null 2>&1; then
+  printf "* * * Error: OKE storage class oci-bv was not found\n" >&2
+  printf "* * *        verify the OKE Block Volume CSI driver before continuing\n" >&2
+  exit 1
+fi
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Import/Update Helm Repos\n"
 # helm repo remove scylla
@@ -60,7 +65,7 @@ helm repo add prometheus-community	https://prometheus-community.github.io/helm-c
 helm repo add minio-operator      	https://operator.min.io    
 helm repo update
 
-if [[ ${context} == *docker* ]]; then
+if [[ ${cloudProvider} == "docker" ]]; then
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Label nodes for Scylla deployment\n"
 # label nodes for Scylla - otherwise labels are set during provisioning
@@ -164,7 +169,7 @@ if [[ ${operatorTag} == "latest" || ${operatorTag} =~ ^1\.2[0-9]\.[0-9] ]]; then
 else
   utilsImage="2025.1.9"
 fi
-[[ ${context} == *eks* ]] && utilsImage="2025.1.9" # because of the EKS image bug
+[[ ${cloudProvider} == "eks" ]] && utilsImage="2025.1.9" # because of the EKS image bug
 
 # the 2025.2.x and 2025.3.x images have a bug that prevents the scylla-operator from working properly
 printf "Updating the ScyllaOperatorConfig with UtilsImage dbVersion=${utilsImage}\n"
@@ -178,7 +183,7 @@ spec:
 EOF
 
 # Install the storageclass scylladb-local-xfs
-if [[ ${context} == *docker* ]]; then
+if [[ ${cloudProvider} == "docker" ]]; then
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Installing the scylladb-local-xfs storageclass\n"
 kubectl apply -f - <<EOF
@@ -198,14 +203,41 @@ else
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Applying the scylla nodeconfig\n"
 # fix the nodeconfig for the local-csi-driver based on the context (cloud provider k8s type)
-[[ ${context} == *eks* ]] && eks="" || eks="#AWS "
-
-cat local-csi-driver/nodeconfigTemplate.yaml | sed \
-  -e "s|#AWS |${eks}|g" \
-  > local-csi-driver/nodeconfig.yaml
-kubectl -n scylla-operator apply --server-side -f local-csi-driver/nodeconfig.yaml
+if [[ ${cloudProvider} == "oke" ]]; then
+  # OKE Dense I/O nodes use /dev/nvme* instance storage and require the
+  # complete sysctl set from the ScyllaDB Operator OKE reference deployment.
+  if ! cat local-csi-driver/nodeconfigOKE.yaml > local-csi-driver/nodeconfig.yaml; then
+    printf "* * * Error: could not render the OKE NodeConfig\n" >&2
+    exit 1
+  fi
+else
+  [[ ${cloudProvider} == "eks" ]] && eks="" || eks="#AWS "
+  if ! cat local-csi-driver/nodeconfigTemplate.yaml | sed \
+    -e "s|#AWS |${eks}|g" \
+    > local-csi-driver/nodeconfig.yaml; then
+    printf "* * * Error: could not render the cloud NodeConfig\n" >&2
+    exit 1
+  fi
+fi
+if ! kubectl -n scylla-operator apply --server-side -f local-csi-driver/nodeconfig.yaml; then
+  printf "* * * Error: could not apply the Scylla NodeConfig\n" >&2
+  exit 1
+fi
 # Wait for NodeConfig to apply changes to the Kubernetes nodes.
-kubectl wait --for='condition=Reconciled' --timeout=10m nodeconfigs.scylla.scylladb.com/scylladb-nodepool-1
+if [[ ${cloudProvider} == "oke" ]]; then
+  if ! kubectl wait --timeout=10m --for='condition=Progressing=False' nodeconfigs.scylla.scylladb.com/scylladb-nodepool-1 \
+    || ! kubectl wait --timeout=10m --for='condition=Degraded=False' nodeconfigs.scylla.scylladb.com/scylladb-nodepool-1 \
+    || ! kubectl wait --timeout=10m --for='condition=Available=True' nodeconfigs.scylla.scylladb.com/scylladb-nodepool-1; then
+    printf "* * * Error: OKE NodeConfig did not become healthy\n" >&2
+    kubectl get nodeconfig scylladb-nodepool-1 -o yaml >&2 || true
+    exit 1
+  fi
+else
+  if ! kubectl wait --for='condition=Reconciled' --timeout=10m nodeconfigs.scylla.scylladb.com/scylladb-nodepool-1; then
+    printf "* * * Error: NodeConfig did not reconcile\n" >&2
+    exit 1
+  fi
+fi
 
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 printf "Installing the scylladb-local-xfs storageclass\n"

@@ -2,7 +2,7 @@
 
 [[ -e init.conf ]] && source init.conf
 
-if [[ -s gcs-service-account.json && ${context} == *gke* ]]; then
+if [[ -s gcs-service-account.json && ${cloudProvider} == "gke" ]]; then
   location="gcs:${gcsBucketName}"
 else
   location="s3:${s3BucketName}"
