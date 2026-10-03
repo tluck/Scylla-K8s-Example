@@ -46,6 +46,9 @@ if [[ ${1:-} == '-d' || ${1:-} == '-x' ]]; then
       items=$(kubectl get crds -o name 2>/dev/null | grep "${pattern}") || true
       [[ -n "${items}" ]] && kubectl delete ${items} || true
     done
+    # cluster-scoped leftovers of the local storage install (the namespace delete above can't reach these)
+    kubectl delete --ignore-not-found \
+      -f=local-csi-driver/{00_clusterrole,00_clusterrole_def,00_scylladb-local-xfs.storageclass,10_csidriver,20_clusterrolebinding}.yaml
   fi
 else
 

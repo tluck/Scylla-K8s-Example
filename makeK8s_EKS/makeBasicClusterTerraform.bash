@@ -61,7 +61,8 @@ else
         -var="prefix=${prefix}" \
         -var="vpc_id=${vpcId}" \
         -var="singlezone=${singleZone}" \
-        -var="ssh_public_key_file=${sshKey}"
+        -var="ssh_public_key_file=${sshKey}" \
+        || { printf "* * * Error: terraform %s failed - skipping kubeconfig and node setup\n" "${verb}" >&2; exit 1; }
 
     if [[ ${verb} != *"apply"* ]]; then
         exit 0

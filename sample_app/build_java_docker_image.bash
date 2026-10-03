@@ -17,9 +17,22 @@ else
     docker login #"${myRegistry}"
 fi
 
+imageRepo="${myRegistry}/java-apps"
+
 docker buildx build \
     --platform linux/amd64,linux/arm64 \
     --file Dockerfile.java \
-    -t "${myRegistry}/java-apps:${imageVersion}" \
-    -t "${myRegistry}/java-apps:latest" \
+    -t "${imageRepo}:${imageVersion}" \
+    -t "${imageRepo}:latest" \
     --push .
+
+# Remove every other local copy of this image. Removing by tag only untags it - an image that is
+# still held by a digest reference (repo:tag@sha256:...) survives - so remove by image ID, which drops
+# all of its tags and digest refs. Done after a successful push so a failed build keeps the old image.
+newImage=$(docker image inspect --format '{{.Id}}' "${imageRepo}:latest" 2>/dev/null || true)
+oldImages=$(docker image ls --filter reference="${imageRepo}" --quiet --no-trunc | sort -u | grep -v -x "${newImage:-none}" || true)
+if [[ -n ${oldImages} ]]; then
+    printf "Removing previous local %s images:\n%s\n" "${imageRepo}" "${oldImages}"
+    # -f also drops references held by stopped containers; an image used by a running container is reported and kept
+    docker image rm -f ${oldImages} || printf "Some previous images are still in use and were kept\n"
+fi

@@ -128,7 +128,7 @@ printf  "\nGrafana credentials: \n\thttps://scylla-grafana:${localGrafanaPort} \
 if [[ ! -z ${username} ]]; then
   printf "Port-forward service/${clusterName}-grafana ${localGrafanaPort}:3000\n"
   kubectl -n ${clusterNamespace} port-forward service/${clusterName}-grafana ${localGrafanaPort}:3000 > /dev/null 2>&1 &
-  printf "Port-forward service/${clusterNamespace}-prometheus 9090:9090\n"
+  printf "Port-forward service/${clusterName}-prometheus 9090:9090\n"
   kubectl -n ${clusterNamespace} port-forward service/${clusterName}-prometheus 9090:9090 > /dev/null 2>&1 &
   # add names to /etc/hosts
   # Check if the exact line exists (flexible whitespace matching)

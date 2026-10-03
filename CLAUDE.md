@@ -20,7 +20,7 @@ Three things drive everything:
 
 Teardown flags are uniform across both scripts:
 - **`-d`** — delete deployments / Helm releases, leave PVCs / CRDs / namespaces.
-- **`-x`** — `-d` plus patches finalizers, deletes PVCs/PVs, removes cluster/manager namespaces; `setupK8s.bash -x` additionally removes CRDs matching `scylla`/`cert-manager`/`coreos`.
+- **`-x`** — `-d` plus patches finalizers, deletes PVCs/PVs, removes cluster/manager namespaces; `setupK8s.bash -x` additionally removes CRDs matching `scylla`/`cert-manager`/`coreos` and the cluster-scoped local storage objects (`scylladb-local-xfs` StorageClass, CSIDriver, ClusterRoles/Binding).
 
 `deployScylla.bash -c` deploys the cluster only, port-forwards if `dataCenterName=dc1`, and exits before monitoring/manager.
 

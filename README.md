@@ -85,7 +85,7 @@ Run from the `k8s` directory (same directory as `init.conf`).
 | Flag     | Behavior                                                                                                                                                                                                                                                    |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`-d`** | Deletes NodeConfigs, namespaces `local-csi-driver` and `scylla-operator-node-tuning`, uninstalls Helm releases: `monitoring`, `cert-manager`, `scylla-operator`. Optionally uninstalls MinIO if enabled. Does **not** remove namespaces or CRDs by default. |
-| **`-x`** | Same as **`-d`**, plus deletes monitoring / cert-manager / scylla-operator namespaces and CRDs matching `scylla`, `cert-manager`, and `coreos` (Prometheus operator CRDs).                                                                                  |
+| **`-x`** | Same as **`-d`**, plus deletes monitoring / cert-manager / scylla-operator namespaces, CRDs matching `scylla`, `cert-manager`, and `coreos` (Prometheus operator CRDs), and the cluster-scoped local storage objects (`scylladb-local-xfs` StorageClass, `local.csi.scylladb.com` CSIDriver, and its ClusterRoles / ClusterRoleBinding) — returning the cluster to a clean slate. |
 
 
 **Note:** Script filename is **`setupK8s.bash`** (capital **U**), not `SetupK8s.bash` or `setupK8s.bash`.
@@ -117,7 +117,7 @@ Run from the `k8s` directory after `setupK8s.bash` has created the `scylladb-loc
 7. **GKE** — If `gcs-service-account.json` exists and context matches `*gke*`, annotates the member service account for Workload Identity.
 8. **Wait and patch** — Waits for `ScyllaCluster` to be Available; patches `${clusterName}-client` to expose port **10000** (REST API) if missing.
 9. With **`-c`** — Port-forward for `dc1` only, then stop.
-10. **ScyllaDB Monitoring** — Applies `templateDBMonitoring.yaml` output; creates Prometheus RBAC and `Prometheus` CR; patches Grafana ConfigMaps (default dashboard, scrape interval), patches Grafana deployment dashboard mounts, restarts ReplicaSets as needed; prints Grafana admin credentials from the secret.
+10. **ScyllaDB Monitoring** — Applies `templateDBMonitoring.yaml` output; creates Prometheus RBAC and `Prometheus` CR; patches Grafana ConfigMaps (default dashboard, scrape interval), patches the Grafana deployment (dashboard mounts, `Recreate` strategy, `revisionHistoryLimit: 0` so only one Grafana pod/ReplicaSet ever exists) and waits for the rollout, restarting it on a re-run so ConfigMap changes are picked up; prints Grafana admin credentials from the secret.
 11. **Scylla Manager** — Renders manager template (Helm or kubectl); optional manager TLS certificate when `customCerts`; applies and waits for `scylla-manager` deployment.
 12. **RBAC** — Applies pod watch Role/RoleBindings for Scylla member and manager service accounts.
 13. **Port forwards** — For `dataCenterName=dc1`, runs `./port_forward.bash` (kills existing `kubectl port-forward`, optional MinIO 9000, headless client service, CQL/TLS/shard-aware ports, Alternator, Grafana, Prometheus; on macOS can trust Grafana cert in Keychain; may append `/etc/hosts` entries).

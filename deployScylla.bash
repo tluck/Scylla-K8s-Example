@@ -23,27 +23,27 @@ if [[ ${options} == '-d' || ${options} == '-x' ]]; then
     helm uninstall scylla          --namespace ${clusterNamespace} || true
     helm uninstall scylla-manager  --namespace ${scyllaManagerNamespace} || true
   else
-    kubectl -n ${clusterNamespace}       delete scyllaCluster/${clusterName} || true
-    kubectl -n ${scyllaManagerNamespace} delete deployment/scylla-manager || true
-    kubectl -n ${scyllaManagerNamespace} delete scyllaCluster/scylla-manager || true
+    kubectl -n ${clusterNamespace}       delete --ignore-not-found scyllaCluster/${clusterName} || true
+    kubectl -n ${scyllaManagerNamespace} delete --ignore-not-found deployment/scylla-manager || true
+    kubectl -n ${scyllaManagerNamespace} delete --ignore-not-found scyllaCluster/scylla-manager || true
     # kubectl -n ${scyllaManagerNamespace} delete -f ${clusterNamespace}.ScyllaManager.yaml
   fi
-    kubectl -n ${clusterNamespace} delete -f ${clusterNamespace}-${clusterName}.ScyllaDBMonitoring.yaml || true
-    kubectl -n ${clusterNamespace} delete Prometheus/prometheus || true
-    kubectl -n ${clusterNamespace} delete secret/${clusterName}-server-certs || true
-    kubectl -n ${clusterNamespace} delete secret/${clusterName}-client-certs || true
-    kubectl -n ${scyllaManagerNamespace} delete secret/scylla-manager-certs || true
-    kubectl -n ${scyllaManagerNamespace} delete secret/${clusterName}-client-certs || true
-    kubectl -n ${clusterNamespace} delete secret/${clusterName}-agent-config-secret || true
+    kubectl -n ${clusterNamespace} delete --ignore-not-found -f ${clusterNamespace}-${clusterName}.ScyllaDBMonitoring.yaml || true
+    kubectl -n ${clusterNamespace} delete --ignore-not-found Prometheus/prometheus || true
+    kubectl -n ${clusterNamespace} delete --ignore-not-found secret/${clusterName}-server-certs || true
+    kubectl -n ${clusterNamespace} delete --ignore-not-found secret/${clusterName}-client-certs || true
+    kubectl -n ${scyllaManagerNamespace} delete --ignore-not-found secret/scylla-manager-certs || true
+    kubectl -n ${scyllaManagerNamespace} delete --ignore-not-found secret/${clusterName}-client-certs || true
+    kubectl -n ${clusterNamespace} delete --ignore-not-found secret/${clusterName}-agent-config-secret || true
     # the issuer secret lives in the cert-manager namespace (created below), not the cluster namespace
-    kubectl -n cert-manager        delete secret/${clusterName}-server-issuer-secret || true
+    kubectl -n cert-manager        delete --ignore-not-found secret/${clusterName}-server-issuer-secret || true
 
   # remove the rest of the resources such PCVs, PVs and namespaces
   if [[ ${options} == '-x' ]]; then
-    kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-server-certs || true
-    kubectl -n ${clusterNamespace} delete Certificate/${clusterName}-client-certs || true
+    kubectl -n ${clusterNamespace} delete --ignore-not-found Certificate/${clusterName}-server-certs || true
+    kubectl -n ${clusterNamespace} delete --ignore-not-found Certificate/${clusterName}-client-certs || true
     # kubectl                        delete ClusterIssuer/${clusterName}-client-issuer || true
-    kubectl -n ${clusterNamespace} delete ClusterIssuer/${clusterName}-server-issuer || true
+    kubectl                        delete --ignore-not-found ClusterIssuer/${clusterName}-server-issuer || true
 
     # Without these guards, `kubectl <verb> $(get -o name)` errors with
     # "resource(s) were provided, but no name was specified" when nothing matches.
@@ -793,8 +793,11 @@ kubectl -n ${clusterNamespace} get configmap ${clusterName}-grafana-provisioning
 printf "Manager dashboard will use Prometheus datasource for metrics\n"
 
 printf "Patching the Grafana deployment to just use the most recent dashboards\n"
-kubectl -n ${clusterNamespace} patch deployment ${clusterName}-grafana --type='json' \
-  -p="[{
+# Recreate stops the old pod before starting the new one (never 2 Grafana pods), and
+# revisionHistoryLimit 0 lets Kubernetes garbage-collect the superseded ReplicaSet
+patchOut=$(kubectl -n ${clusterNamespace} patch deployment ${clusterName}-grafana --type='json' \
+  -p="[
+  {
     \"op\": \"replace\",
     \"path\": \"/spec/template/spec/initContainers/0/volumeMounts\",
     \"value\": [
@@ -802,11 +805,14 @@ kubectl -n ${clusterNamespace} patch deployment ${clusterName}-grafana --type='j
       {\"name\": \"scylladb-master\", \"mountPath\": \"/var/run/configmaps/grafana-scylladb-dashboards/scylladb-master\"},
       {\"name\": \"manager-3\", \"mountPath\": \"/var/run/configmaps/grafana-scylladb-dashboards/manager-3\"}
     ]
-  }]"
-
-# kubectl -n ${clusterNamespace} rollout restart deployment ${clusterName}-grafana
-# note: BSD/macOS xargs skips the command entirely when there are no matching ReplicaSets
-kubectl -n ${clusterNamespace} get rs -o name|grep ${clusterName} |xargs kubectl -n ${clusterNamespace} delete
+  },
+  {\"op\": \"replace\", \"path\": \"/spec/strategy\", \"value\": {\"type\": \"Recreate\"}},
+  {\"op\": \"add\", \"path\": \"/spec/revisionHistoryLimit\", \"value\": 0}
+  ]")
+printf "%s\n" "${patchOut}"
+# a re-run leaves the pod template unchanged, so no rollout happens - restart so Grafana re-reads grafana.ini
+[[ ${patchOut} == *"(no change)"* ]] && kubectl -n ${clusterNamespace} rollout restart deployment ${clusterName}-grafana
+kubectl -n ${clusterNamespace} rollout status deployment ${clusterName}-grafana --timeout=5m
 
 # wait for the grafana deployment to be ready
 kubectl -n ${clusterNamespace} wait scylladbmonitoring/${clusterName} --for=condition=Available=True --timeout=90s
