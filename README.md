@@ -20,7 +20,7 @@ Install these tools in addition to this repository:
 ### TL;DR
 
 1. Provision Kubernetes: GKE with `./makeK8s_GKE/makeBasicCluster.bash`, EKS with `./makeK8s_EKS/makeBasicClusterTerraform.bash`, or OKE with `./makeK8s_OKE/makeBasicCluster.bash`.
-2. Run `./setupK8s.bash` — installs cert-manager, monitoring stack operator dependencies, Scylla Operator, local storage, and optional MinIO.
+2. Run `./setupK8s.bash` — installs cert-manager, monitoring stack operator dependencies, Scylla Operator, local storage, and optional SeaweedFS (in-cluster S3 for backups).
 3. Edit `init.conf` as needed, then run `./deployScylla.bash` — deploys the Scylla cluster, ScyllaDB Monitoring, Scylla Manager, and optional port-forwards.
 
 Some environments use convenience symlinks `./_step_1` → `setupK8s.bash` and `./_step_2` → `deployScylla.bash`; if those links are not present, invoke the scripts by name as above.
@@ -52,7 +52,7 @@ For configuration, security defaults, and teardown instructions, see [`makeK8s_O
 `setupK8s.bash` and `deployScylla.bash` both source `init.conf` when it exists. It defines:
 
 - **Install mode:** `helmEnabled` — Scylla cluster / manager via Helm charts vs raw manifests.
-- **Features:** `backupEnabled`, `minioEnabled`, `enableAlternator`, `enableAuth`, `enableTLS`, `mTLS`, `customCerts`, `encryptionAtRest`, `writeIsolation`.
+- **Features:** `backupEnabled`, `seaweedfsEnabled`, `enableAlternator`, `enableAuth`, `enableTLS`, `mTLS`, `customCerts`, `encryptionAtRest`, `writeIsolation`.
   - **`encryptionAtRest`** (Enterprise) — encrypts system data and all user tables at rest using a **locally-generated key** (`LocalFileSystemKeyProviderFactory`), no cloud KMS. On the first deploy `deployScylla.bash` generates `encryption_keys/system_key`, stores it as the `${clusterName}-encryption-key` secret, and mounts it into every Scylla pod at `/etc/scylla/encryption_keys/`; later deploys reuse the same key (from the local file, or recovered from the existing secret). Requires `enableAuth=true` and `helmEnabled=false` (it rides the custom `scylla.yaml` ConfigMap path). **Back up `encryption_keys/system_key` — losing it makes the encrypted data unrecoverable.**
 - **Versions:** `operatorTag`, `dbVersion`, `managerVersion`, `agentVersion`, `prometheusVersion`.
 - **Platform and topology:** `cloudProvider` (normally inferred from the current context), `clusterName`, `dataCenterName`, `clusterNamespace`, `externalSeeds` (multi-DC), node selectors, `members` (nodes per rack), capacities, and limits — adjusted per `kubectl` context (`docker-desktop`, `gke`, `eks`, `oke`, etc.).
@@ -65,7 +65,7 @@ Run from the `k8s` directory (same directory as `init.conf`).
 
 ### Normal run (no flags)
 
-1. **Helm repositories** — Adds/updates: Scylla operator charts, Jetstack (cert-manager), Prometheus community (kube-prometheus-stack), MinIO operator.
+1. **Helm repositories** — Adds/updates: Scylla operator charts, Jetstack (cert-manager), Prometheus community (kube-prometheus-stack).
 2. **Node labels (Docker Desktop only)** — If `context` matches `*docker*`, runs `./labelNodes.bash` so workloads can target labeled nodes.
 3. **cert-manager** — Installs via Helm into `cert-manager` if not already present, with node selectors from `init.conf`.
 4. **kube-prometheus-stack** — Installs as `monitoring` in `scyllaMonitoringNamespace` (from `init.conf`), then **removes** the chart’s default Grafana deployment so Scylla’s own monitoring stack can own Grafana.
@@ -77,14 +77,14 @@ Run from the `k8s` directory (same directory as `init.conf`).
 8. **Local storage for Scylla**
   - **Docker / local:** Creates `StorageClass` `scylladb-local-xfs` using `rancher.io/local-path`.
   - **Cloud (non-Docker):** Renders `local-csi-driver/nodeconfig.yaml` from `nodeconfigTemplate.yaml` (EKS vs non-EKS), or uses `nodeconfigOKE.yaml` on OKE; applies NodeConfig, applies the local CSI driver manifest set under `local-csi-driver/`, and waits for the driver DaemonSet.
-9. **MinIO** — If `minioEnabled=true`, runs `./deployMinio.bash`.
+9. **SeaweedFS** — If `seaweedfsEnabled=true` (forced on for Docker Desktop and OKE when `backupEnabled=true`), runs `./deploySeaweedfs.bash`. It deploys a single-pod `weed mini` S3 server (Deployment + PVC + Service in namespace `seaweedfs`) at `http://seaweedfs-s3.seaweedfs:8333`, with the `scylla-backups` bucket and the `seaweedfsAccessKey` / `seaweedfsSecretKey` credentials from `init.conf`. SeaweedFS replaced MinIO, which deleted its community images from Docker Hub in September 2026. `-d` keeps the PVC and its backups; `-x` deletes the namespace.
 
 ### Teardown flags
 
 
 | Flag     | Behavior                                                                                                                                                                                                                                                    |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`-d`** | Deletes NodeConfigs, namespaces `local-csi-driver` and `scylla-operator-node-tuning`, uninstalls Helm releases: `monitoring`, `cert-manager`, `scylla-operator`. Optionally uninstalls MinIO if enabled. Does **not** remove namespaces or CRDs by default. |
+| **`-d`** | Deletes NodeConfigs, namespaces `local-csi-driver` and `scylla-operator-node-tuning`, uninstalls Helm releases: `monitoring`, `cert-manager`, `scylla-operator`. Optionally removes SeaweedFS if enabled (`-d` keeps its PVC). Does **not** remove namespaces or CRDs by default. |
 | **`-x`** | Same as **`-d`**, plus deletes monitoring / cert-manager / scylla-operator namespaces, CRDs matching `scylla`, `cert-manager`, and `coreos` (Prometheus operator CRDs), and the cluster-scoped local storage objects (`scylladb-local-xfs` StorageClass, `local.csi.scylladb.com` CSIDriver, and its ClusterRoles / ClusterRoleBinding) — returning the cluster to a clean slate. |
 
 
@@ -110,7 +110,7 @@ Run from the `k8s` directory after `setupK8s.bash` has created the `scylladb-loc
 
 1. **Preflight** — Verifies a storage class containing `xfs` exists (expects prior `setupK8s.bash`).
 2. **Namespace** — Ensures `clusterNamespace` exists.
-3. **Backup agent secret** — If `backupEnabled`, creates `${clusterName}-agent-config-secret` with S3, MinIO, or GCS settings depending on platform and `minioEnabled` / `gcs-service-account.json`. OKE defaults to MinIO because OCI Object Storage is not a documented ScyllaDB Manager S3 provider.
+3. **Backup agent secret** — If `backupEnabled`, creates `${clusterName}-agent-config-secret` with S3, SeaweedFS, or GCS settings depending on platform and `seaweedfsEnabled` / `gcs-service-account.json`. OKE defaults to SeaweedFS because OCI Object Storage is not a documented ScyllaDB Manager S3 provider.
 4. **TLS** — Optional custom server issuers/certificates (`customCerts`), client ClusterIssuer and certificates for `mTLS` or custom client TLS.
 5. **Scylla configuration** — When `enableAuth` is true and `helmEnabled` is false, applies a ConfigMap `${clusterName}-config` with `scylla.yaml` (auth, TLS, Alternator, optional object storage endpoints, etc.).
 6. **ScyllaCluster** — Renders `templateClusterHelm.yaml` or `templateCluster.yaml` to a namespaced YAML and applies via Helm or `kubectl`. Supports multi-DC via `externalSeeds` when not `dc1`.
@@ -120,7 +120,7 @@ Run from the `k8s` directory after `setupK8s.bash` has created the `scylladb-loc
 10. **ScyllaDB Monitoring** — Applies `templateDBMonitoring.yaml` output; creates Prometheus RBAC and `Prometheus` CR; patches Grafana ConfigMaps (default dashboard, scrape interval), patches the Grafana deployment (dashboard mounts, `Recreate` strategy, `revisionHistoryLimit: 0` so only one Grafana pod/ReplicaSet ever exists) and waits for the rollout, restarting it on a re-run so ConfigMap changes are picked up; prints Grafana admin credentials from the secret.
 11. **Scylla Manager** — Renders manager template (Helm or kubectl); optional manager TLS certificate when `customCerts`; applies and waits for `scylla-manager` deployment.
 12. **RBAC** — Applies pod watch Role/RoleBindings for Scylla member and manager service accounts.
-13. **Port forwards** — For `dataCenterName=dc1`, runs `./port_forward.bash` (kills existing `kubectl port-forward`, optional MinIO 9000, headless client service, CQL/TLS/shard-aware ports, Alternator, Grafana, Prometheus; on macOS can trust Grafana cert in Keychain; may append `/etc/hosts` entries).
+13. **Port forwards** — For `dataCenterName=dc1`, runs `./port_forward.bash` (kills existing `kubectl port-forward`, optional SeaweedFS S3 on 8333, headless client service, CQL/TLS/shard-aware ports, Alternator, Grafana, Prometheus; on macOS can trust Grafana cert in Keychain; may append `/etc/hosts` entries).
 
 ---
 
@@ -152,7 +152,7 @@ sctool backup --name="hourly_backup" --cluster="region1/scylla" --location='s3:s
 
 For GKE backups to GCS, provide `gcs-service-account.json` and configure buckets as in `init.conf`.
 
-For OKE, backups use MinIO by default. OCI Object Storage exposes an S3 Compatibility API, but OCI is not in ScyllaDB Manager's documented provider list; this example deliberately does not configure it as though it were natively supported.
+For OKE, backups use the in-cluster SeaweedFS endpoint by default. OCI Object Storage exposes an S3 Compatibility API, but OCI is not in ScyllaDB Manager's documented provider list; this example deliberately does not configure it as though it were natively supported. SeaweedFS is not on that list either. It is used here because it is a self-contained test target, and backups to it are verified end to end on Docker Desktop.
 
 ---
 
@@ -161,6 +161,7 @@ For OKE, backups use MinIO by default. OCI Object Storage exposes an S3 Compatib
 Under `sample_app/` you can build images and deploy workloads with scripts such as:
 
 - **`_deploy_python-apps_k8s.bash`** / **`_deploy_java-apps_k8s.bash`** — deploy sample apps to the cluster.
+  They don't need the operator or ScyllaDB. Each one creates the cluster namespace if it's missing and applies `sample-apps-k8s-access.yaml`, which sets up the `sample-apps` ServiceAccount and the access the in-pod scripts need. The only prerequisite is a node labeled `scylla.scylladb.com/node-type=<nodeSelector2>`. On Docker Desktop, `labelNodes.bash` (run by `setupK8s.bash`) adds that label. `-d` removes the pod, and removes the ServiceAccount and RBAC once neither app pod is left.
 - **`run_app_k8s.bash`** — run a Python script or `cqlsh` against the cluster from a configured environment.
 - **`build_python_docker_image.bash`** / **`build_java_docker_image.bash`** — build the sample container images before deploy.
 
@@ -221,7 +222,7 @@ Scylla Operator documentation: [Scylla Operator Docs](https://operator.docs.scyl
 - Scaling racks/nodes per operator and templates.
 - Monitoring with Prometheus and Grafana (ScyllaDB Monitoring CR + kube-prometheus-stack base).
 - [Scylla Manager](https://docs.scylladb.com/operating-scylla/manager/) for backups, repairs, and operations.
-- TLS (operator-managed, custom, or mTLS), Alternator API, optional MinIO or cloud object storage for backups.
+- TLS (operator-managed, custom, or mTLS), Alternator API, optional in-cluster SeaweedFS S3 or cloud object storage for backups.
 - Dead node replacement, upgrades, and other operator workflows as documented upstream.
 
 Contributions can be submitted as pull requests to the owning repository.

@@ -74,13 +74,13 @@ After creation, return to the repository root:
 ./deployScylla.bash
 ```
 
-The top-level scripts detect the `-oke` context. Scylla racks are pinned to `oci.oraclecloud.com/fault-domain` values `FAULT-DOMAIN-1` through `FAULT-DOMAIN-3`; monitoring, Manager, and MinIO use OKE's `oci-bv` StorageClass.
+The top-level scripts detect the `-oke` context. Scylla racks are pinned to `oci.oraclecloud.com/fault-domain` values `FAULT-DOMAIN-1` through `FAULT-DOMAIN-3`; monitoring, Manager, and SeaweedFS use OKE's `oci-bv` StorageClass.
 
 ## Backups
 
-ScyllaDB Manager's documented S3-compatible provider list does not include OCI Object Storage. This repository therefore does not inject OCI Customer Secret Keys or claim native OCI Object Storage support. When backups are enabled on OKE, `init.conf` selects the supported in-cluster MinIO path. MinIO uses a 50 GiB `oci-bv` volume, matching OCI Block Volume's minimum size.
+ScyllaDB Manager's documented S3-compatible provider list does not include OCI Object Storage. This repository therefore does not inject OCI Customer Secret Keys or claim native OCI Object Storage support. When backups are enabled on OKE, `init.conf` selects the in-cluster SeaweedFS S3 endpoint (`deploySeaweedfs.bash`). SeaweedFS uses a 50 GiB `oci-bv` volume, matching OCI Block Volume's minimum size. It replaced MinIO, whose community images were deleted from Docker Hub in September 2026.
 
-This example retains the repository's demo MinIO credentials (`minio` / `minio123`) on a cluster-internal endpoint. Replace them in both the Tenant and Manager agent configuration before using this outside an isolated test cluster.
+This example uses the repository's demo S3 credentials (`seaweedfs` / `seaweedfs123`) on a cluster-internal endpoint. Change `seaweedfsAccessKey` / `seaweedfsSecretKey` in `init.conf` before using this outside an isolated test cluster. Both `deploySeaweedfs.bash` and the Manager agent configuration read them from there.
 
 Use an external backup target only after independently validating it against the exact ScyllaDB Manager version and configuring the agent templates yourself.
 

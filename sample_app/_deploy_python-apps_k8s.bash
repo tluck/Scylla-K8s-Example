@@ -2,6 +2,7 @@
 
 SCRIPT_DIR="$(dirname $0)"
 [[ -e "${SCRIPT_DIR}/init.conf" ]] && source "${SCRIPT_DIR}/init.conf" 
+source "${SCRIPT_DIR}/_app_prereqs.bash"
 
 if [[ ${1} == "-h" ]]; then
     printf "%s\n" "Usage: $0 [-d] [clusterNamespace] [imageVersion]"
@@ -35,8 +36,10 @@ appshm="128Mi"
 
 if [[ ${delete} == "-d" ]]; then
   kubectl --namespace=${clusterNamespace} delete pod/${appName} --ignore-not-found=true
-  kubectl --namespace=${clusterNamespace} delete role,rolebinding python-k8s-access --ignore-not-found=true
+  remove_app_prereqs
 else
+  ensure_app_prereqs || exit 1
+
 #k8sNodeCount=1 
 #while [ $n -lt $num ]; do
 # assume 2 node groups and the scylla cluster in node-0-* and the python3-apps can run on node-1-*
@@ -85,15 +88,9 @@ else
     fi
   fi
 
-  # Kubernetes access for the scripts that run inside the pod - see
-  # python-k8s-access.yaml for what it grants and why. The only substitution is
-  # the ServiceAccount subject, which follows clusterName like the pod's own
-  # serviceAccountName below.
-  sed "s/name: scylla-member/name: ${clusterName}-member/" \
-    "${SCRIPT_DIR}/python-k8s-access.yaml" |
-    kubectl -n "${clusterNamespace}" apply -f=-
-
-  kubectl -n ${clusterNamespace} apply --server-side -f=- <<EOF
+  # The namespace, ServiceAccount and the Kubernetes access the in-pod scripts
+  # need were applied by ensure_app_prereqs - see sample-apps-k8s-access.yaml.
+  kubectl -n ${clusterNamespace} apply --server-side -f=- <<EOF || exit 1
 apiVersion: v1
 kind: Pod
 metadata:
@@ -101,7 +98,7 @@ metadata:
   labels:
     app.kubernetes.io/name: ${appName}
 spec:
-  serviceAccountName: ${clusterName}-member
+  serviceAccountName: ${appServiceAccount}
   containers:
     # - image: "docker.io/tjlscylladb/python3-apps:${imageVersion}"
     - image: "docker.io/tjlscylladb/python3-apps:latest"

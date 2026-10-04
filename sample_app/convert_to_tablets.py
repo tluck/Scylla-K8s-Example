@@ -39,12 +39,11 @@ Phases 1 and 2 are reversible with -r; finalization is NOT.
 Restarting a node without kubectl: --restart k8s (the default) drains the node
 and then deletes its pod through the in-cluster Kubernetes API, using the
 ServiceAccount token mounted in this pod. That account has to be allowed to
-delete pods, and the `scylla-member` account the python-application pod runs as
-is NOT: it gets pods/get,list,patch,update,watch from the operator.
-_deploy_python-apps_k8s.bash applies the missing Role with the pod; to add it
-to a pod that is already running:
+delete pods. The python-application pod runs as the `sample-apps` account,
+and _deploy_python-apps_k8s.bash applies its Role with the pod; to add it to a
+pod that is already running:
 
-    kubectl -n scylla-dc1 apply -f python-k8s-access.yaml
+    kubectl -n scylla-dc1 apply -f sample-apps-k8s-access.yaml
 
 The script checks that permission with a SelfSubjectAccessReview before it
 drains anything, so a missing Role costs nothing but an error message.
@@ -472,7 +471,7 @@ def check_restart_capability(nodes, opts, k8s):
             f"this pod's ServiceAccount may not delete pods in {k8s.namespace}, so it "
             "cannot restart a node.\n"
             "  grant it once with:  kubectl -n " + str(k8s.namespace) +
-            " apply -f python-k8s-access.yaml\n"
+            " apply -f sample-apps-k8s-access.yaml\n"
             "  or re-run with --restart manual and restart each node yourself")
 
 
@@ -841,7 +840,7 @@ def parse_args():
     parser.add_argument("--restart", choices=("k8s", "manual"), default="k8s",
                         help="how to restart a node: k8s = delete the pod through the "
                              "in-cluster API (default; needs RBAC to delete pods, see "
-                             "python-k8s-access.yaml); manual = wait for you or the "
+                             "sample-apps-k8s-access.yaml); manual = wait for you or the "
                              "operator to restart it")
     parser.add_argument("--api-port", type=int, default=API_PORT,
                         help=f"ScyllaDB REST API port (default: {API_PORT})")

@@ -1,5 +1,5 @@
 # Use the Python slim image
-ARG VERSION=3.14.3-slim
+ARG VERSION=3.14.7-slim
 FROM python:${VERSION}
 
 # Set the working directory in the container

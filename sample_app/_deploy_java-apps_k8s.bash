@@ -2,6 +2,7 @@
 
 SCRIPT_DIR="$(dirname $0)"
 [[ -e "${SCRIPT_DIR}/init.conf" ]] && source "${SCRIPT_DIR}/init.conf"
+source "${SCRIPT_DIR}/_app_prereqs.bash"
 
 if [[ ${1} == "-h" ]]; then
     printf "%s\n" "Usage: $0 [-d] [clusterNamespace] [imageVersion]"
@@ -33,8 +34,14 @@ fi
 
 if [[ ${delete} == "-d" ]]; then
   kubectl --namespace=${clusterNamespace} delete pod/${appName} --ignore-not-found=true
+  remove_app_prereqs
 else
-  kubectl -n ${clusterNamespace} apply --server-side -f=- <<EOF
+  ensure_app_prereqs || exit 1
+
+  # A pod's spec is mostly immutable (serviceAccountName, resources, ...), so replace it rather than patch it
+  kubectl -n "${clusterNamespace}" delete pod/"${appName}" --ignore-not-found --wait --timeout=120s
+
+  kubectl -n ${clusterNamespace} apply --server-side -f=- <<EOF || exit 1
 apiVersion: v1
 kind: Pod
 metadata:
@@ -42,7 +49,7 @@ metadata:
   labels:
     app.kubernetes.io/name: ${appName}
 spec:
-  serviceAccountName: ${clusterName}-member
+  serviceAccountName: ${appServiceAccount}
   containers:
   # - image: "docker.io/tjlscylladb/java-apps:${imageVersion}"
   - image: "docker.io/tjlscylladb/java-apps:latest"

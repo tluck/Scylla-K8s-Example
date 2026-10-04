@@ -128,15 +128,15 @@ else
   dev="#DEV "
   prod=""
 fi
-minio="#"
+seaweedfs="#"
 awss3="#"
-if [[ $minioEnabled == true ]]; then
-  minio=""
+if [[ $seaweedfsEnabled == true ]]; then
+  seaweedfs=""
 else
   awss3=""
 fi
-if [[ ${cloudProvider} == "oke" && ${backupEnabled} == true && ${minioEnabled} != true ]]; then
-  printf "* * * Error: OKE backups require minioEnabled=true\n" >&2
+if [[ ${cloudProvider} == "oke" && ${backupEnabled} == true && ${seaweedfsEnabled} != true ]]; then
+  printf "* * * Error: OKE backups require seaweedfsEnabled=true\n" >&2
   printf "* * *        OCI Object Storage is not a supported ScyllaDB Manager S3 provider\n" >&2
   exit 1
 fi
@@ -175,7 +175,7 @@ if [[ ${backupEnabled} == true && ${cloudProvider} == "gke" && -s gcs-service-ac
   gcs=""
   useS3="#"
   awss3="#"
-  minio="#"
+  seaweedfs="#"
   gcsSecretBefore=$( secret_hash ${clusterNamespace} gcs-service-account )
   # create|apply rather than delete|create: deleting first leaves a window where
   # a pod scheduled in the gap fails to mount with CreateContainerConfigError
@@ -192,7 +192,7 @@ fi
 #eval $(cat ~/.aws/credentials|grep access|sed -e 's/ //g' -e 's/aws_access_key_id/export AWS_ACCESS_KEY_ID/' -e 's/aws_secret_access_key/export AWS_SECRET_ACCESS_KEY/')
 
 if [[ ${backupEnabled} == true ]]; then
-  if [[ ${useS3} == '' || ${minio} == '' ]]; then
+  if [[ ${useS3} == '' || ${seaweedfs} == '' ]]; then
     bak=""
   else
     bak="#"
@@ -210,11 +210,13 @@ if [[ ${backupEnabled} == true ]]; then
   data:
     scylla-manager-agent.yaml: $(echo -n \
   ${useS3}"s3:
-    ${minio}access_key_id: minio
-    ${minio}secret_access_key: minio123
-    ${minio}provider: Minio
-    ${minio}endpoint: http://minio-hl.minio:9000
-    ${minio}no_check_bucket: true
+    ${seaweedfs}access_key_id: ${seaweedfsAccessKey}
+    ${seaweedfs}secret_access_key: ${seaweedfsSecretKey}
+    ${seaweedfs}# SeaweedFS is not a provider the agent knows ("unknown provider: SeaweedFS"); Minio is the
+    ${seaweedfs}# documented ScyllaDB Manager provider for a generic path-style S3 server, which SeaweedFS is
+    ${seaweedfs}provider: Minio
+    ${seaweedfs}endpoint: http://seaweedfs-s3.seaweedfs:8333
+    ${seaweedfs}no_check_bucket: true
     ${awss3}#access_key_id: ${AWS_ACCESS_KEY_ID:-""}
     ${awss3}#secret_access_key: ${AWS_SECRET_ACCESS_KEY:-""}
     ${awss3}provider: AWS
@@ -428,10 +430,10 @@ data:
     ${awss3}  port: 443
     ${awss3}  https: true
     ${awss3}  aws_region: ${awsRegion}
-    ${minio}- name: minio-hl.minio
-    ${minio}  port: 9000
-    ${minio}  https: false
-    ${minio}  aws_region: local
+    ${seaweedfs}- name: seaweedfs-s3.seaweedfs
+    ${seaweedfs}  port: 8333
+    ${seaweedfs}  https: false
+    ${seaweedfs}  aws_region: local
     # Cert options
     ${certs}client_encryption_options:
       ${certs}enabled: ${enableTLS}
@@ -999,7 +1001,7 @@ printf "Adding/Updating the Scylla Manager repair tasks and updating cluster pas
 ./update_scylla_manager.bash
 
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
-# open up ports for Grafana, Scylla client (non-TLS and TLS), and MinIO
+# open up ports for Grafana, Scylla client (non-TLS and TLS), and SeaweedFS S3
 kubectl -n ${clusterNamespace} wait deployment/${clusterName}-grafana  --for=condition=Available=True --timeout=90s
  
 # forward ports to a headless client service

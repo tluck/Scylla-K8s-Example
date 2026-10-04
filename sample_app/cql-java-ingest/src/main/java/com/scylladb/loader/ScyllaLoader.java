@@ -29,10 +29,19 @@ import java.util.stream.LongStream;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static java.util.concurrent.TimeUnit.MINUTES; 
 
-@CommandLine.Command(name = "scylla-loader", mixinStandardHelpOptions = true, version = "5.0",
+@CommandLine.Command(name = "scylla-loader", mixinStandardHelpOptions = true,
+    versionProvider = ScyllaLoader.ManifestVersion.class,
     description = "ScyllaDB data loader with optimized schema and batch modes")
 public class ScyllaLoader implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(ScyllaLoader.class);
+    // Implementation-Version is written into the jar manifest from the pom's <version>
+    private static final String VERSION = Optional.ofNullable(ScyllaLoader.class.getPackage().getImplementationVersion())
+        .orElse("dev");
+
+    static class ManifestVersion implements CommandLine.IVersionProvider {
+        @Override
+        public String[] getVersion() { return new String[] { "scylla-loader " + VERSION }; }
+    }
     
     private static final long WORKER_TIMEOUT_SECONDS = 600;
     private static final long SHUTDOWN_TIMEOUT_SECONDS = 30;
@@ -62,7 +71,10 @@ public class ScyllaLoader implements Runnable {
             description = {"Batch mode: none|concurrent|logged|unlogged (default: unlogged)"}) BatchMode batchMode = BatchMode.unlogged;
     @Option(names = {"-c", "--concurrency"}, defaultValue = "100",
             description = "Max in-flight requests per worker in concurrent mode (default: 100)") int concurrency = 100;
-    @Option(names = {"--tablets"}, description = "Enable tablets (Scylla 6.0+)") boolean tablets = true;
+    @Option(names = {"--tablets"}, negatable = true, defaultValue = "true", fallbackValue = "true",
+            description = "Enable tablets (Scylla 6.0+); use --no-tablets to disable (default: enabled)") boolean tablets = true;
+    @Option(names = {"--rf"}, defaultValue = "0",
+            description = "Replication factor for the keyspace (default: auto - rack count in the DC with tablets, else min(3, nodes in the DC))") int rf = 0;
 
     public static void main(String[] args) {
         new CommandLine(new ScyllaLoader()).execute(args);
@@ -71,7 +83,7 @@ public class ScyllaLoader implements Runnable {
     @Override
     public void run() {
         Instant start = Instant.now();
-        logger.info("ScyllaDB Loader {} Data Model (individual columns)", "5.0");
+        logger.info("ScyllaDB Loader {} Data Model (individual columns)", VERSION);
         logger.info("Loading {} rows -> {}.{}", rowCount, keyspace, table);
 
         List<String> hostList = parseHosts();
@@ -122,14 +134,15 @@ public class ScyllaLoader implements Runnable {
             }
 
             // ALWAYS collect results even on timeout
-            for (CompletableFuture<WorkerResult> f : futures) {
+            for (int idx = 0; idx < futures.size(); idx++) {
+                CompletableFuture<WorkerResult> f = futures.get(idx);
                 try {
                     WorkerResult r = f.get(10, SECONDS);
                     totalRows.addAndGet(r.total());
                     totalFailed.addAndGet(r.failed());
                     logger.info("W{}: {} ok | {} failed", r.workerIndex(), r.total(), r.failed());
                 } catch (Exception e) {
-                    logger.error("Worker {} unreachable: {}", f, e.toString());
+                    logger.error("Worker {} unreachable: {}", idx, e.toString());
                 }
             }
 
@@ -263,9 +276,18 @@ public class ScyllaLoader implements Runnable {
 
         private long executeConcurrent(CqlSession session, PreparedStatement prepared,
                                      List<RowData> batchRows, int concurrency) {
+            // Cap in-flight requests at --concurrency; without this every row in the
+            // batch would be sent at once and in-flight would equal --batch_size.
+            Semaphore inFlight = new Semaphore(concurrency);
             try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
                 List<CompletableFuture<Boolean>> futures = batchRows.stream()
                     .map(row -> CompletableFuture.supplyAsync(() -> {
+                        try {
+                            inFlight.acquire();
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            return false;
+                        }
                         try {
                             // ✅ NEW: Bind individual columns
                             session.execute(prepared.bind(
@@ -276,6 +298,8 @@ public class ScyllaLoader implements Runnable {
                         } catch (Exception e) {
                             logger.debug("Concurrent failed row {}: {}", row.userid(), e.getMessage());
                             return false;
+                        } finally {
+                            inFlight.release();
                         }
                     }, executor))
                     .toList();
@@ -357,8 +381,7 @@ public class ScyllaLoader implements Runnable {
             long oneHourMs = 3_600_000;  // 60 * 60 * 1000
             long lastUpdatedMillis = nowMs - oneHourMs + reusableRandom.nextLong(oneHourMs);
             
-            String uuidStr = String.format("%032x", reusableRandom.nextLong());
-            String chunkHash = uuidStr.substring(0, 32);
+            String chunkHash = String.format("%016x%016x", reusableRandom.nextLong(), reusableRandom.nextLong());
             
             int month = 1 + reusableRandom.nextInt(12);
             int day = 1 + reusableRandom.nextInt(31);
@@ -384,7 +407,7 @@ public class ScyllaLoader implements Runnable {
                 lastUpdatedMillis,  // ✅ Now: now-1hr ± random(1hr)
                 // ✅ FIXED: TTL 45-90 days (seconds)
                 (int)(45 * 24 * 3600L + reusableRandom.nextInt(46 * 24 * 3600)),
-                lastUpdatedMillis // set timestamp to match last_updated_millis 
+                lastUpdatedMillis * 1000 // USING TIMESTAMP is in microseconds; match last_updated_millis
             );
         }
 
@@ -430,8 +453,10 @@ public class ScyllaLoader implements Runnable {
     private SSLContext createSslContext() throws Exception {
         CertificateFactory cf = CertificateFactory.getInstance("X.509");
 
-        X509Certificate caCert = (X509Certificate) cf.generateCertificate(
-            Files.newInputStream(Paths.get(tlsDir, "ca.crt")));
+        X509Certificate caCert;
+        try (var in = Files.newInputStream(Paths.get(tlsDir, "ca.crt"))) {
+            caCert = (X509Certificate) cf.generateCertificate(in);
+        }
 
         KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
         trustStore.load(null, null);
@@ -447,18 +472,12 @@ public class ScyllaLoader implements Runnable {
             return sslContext;
         }
 
-        X509Certificate clientCert = (X509Certificate) cf.generateCertificate(
-            Files.newInputStream(Paths.get(tlsDir, "tls.crt")));
-
-        byte[] keyBytes = Files.readAllBytes(Paths.get(tlsDir, "tls.key"));
-        PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(keyBytes);
-        java.security.PrivateKey privateKey;
-        try {
-            KeyFactory kf = KeyFactory.getInstance("RSA");
-            privateKey = kf.generatePrivate(spec);
-        } catch (InvalidKeySpecException e) {
-            throw new RuntimeException("Invalid private key format (expected PKCS#8)", e);
+        X509Certificate clientCert;
+        try (var in = Files.newInputStream(Paths.get(tlsDir, "tls.crt"))) {
+            clientCert = (X509Certificate) cf.generateCertificate(in);
         }
+
+        java.security.PrivateKey privateKey = loadPrivateKey(Paths.get(tlsDir, "tls.key"));
 
         KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
         keyStore.load(null, null);
@@ -471,6 +490,71 @@ public class ScyllaLoader implements Runnable {
         SSLContext sslContext = SSLContext.getInstance("TLS");
         sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
         return sslContext;
+    }
+
+    // Accepts PEM PKCS#8 ("PRIVATE KEY"), PEM PKCS#1 ("RSA PRIVATE KEY", what the
+    // operator's client cert secrets contain), or raw DER PKCS#8.
+    private static java.security.PrivateKey loadPrivateKey(java.nio.file.Path path) throws Exception {
+        byte[] raw = Files.readAllBytes(path);
+        String text = new String(raw, java.nio.charset.StandardCharsets.US_ASCII);
+        byte[] pkcs8;
+        if (text.contains("-----BEGIN RSA PRIVATE KEY-----")) {
+            pkcs8 = wrapPkcs1InPkcs8(pemBody(text, "RSA PRIVATE KEY"));
+        } else if (text.contains("-----BEGIN PRIVATE KEY-----")) {
+            pkcs8 = pemBody(text, "PRIVATE KEY");
+        } else if (text.contains("-----BEGIN")) {
+            throw new IllegalArgumentException("Unsupported key format in " + path
+                + " (expected PKCS#8 or PKCS#1 RSA, unencrypted)");
+        } else {
+            pkcs8 = raw;
+        }
+
+        PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(pkcs8);
+        for (String alg : List.of("RSA", "EC")) {
+            try {
+                return KeyFactory.getInstance(alg).generatePrivate(spec);
+            } catch (InvalidKeySpecException ignored) {
+                // try the next algorithm
+            }
+        }
+        throw new IllegalArgumentException("Could not parse private key in " + path + " as RSA or EC");
+    }
+
+    private static byte[] pemBody(String pem, String label) {
+        String begin = "-----BEGIN " + label + "-----";
+        String end = "-----END " + label + "-----";
+        int from = pem.indexOf(begin) + begin.length();
+        int to = pem.indexOf(end, from);
+        if (to < 0) throw new IllegalArgumentException("Malformed PEM: missing " + end);
+        return Base64.getMimeDecoder().decode(pem.substring(from, to));
+    }
+
+    // PrivateKeyInfo ::= SEQUENCE { INTEGER 0, AlgorithmIdentifier rsaEncryption, OCTET STRING pkcs1 }
+    private static byte[] wrapPkcs1InPkcs8(byte[] pkcs1) {
+        byte[] version = {0x02, 0x01, 0x00};
+        byte[] rsaAlgId = {0x30, 0x0d, 0x06, 0x09, 0x2a, (byte) 0x86, 0x48, (byte) 0x86,
+            (byte) 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00};
+        byte[] octet = derTlv(0x04, pkcs1);
+        var body = new java.io.ByteArrayOutputStream();
+        body.writeBytes(version);
+        body.writeBytes(rsaAlgId);
+        body.writeBytes(octet);
+        return derTlv(0x30, body.toByteArray());
+    }
+
+    private static byte[] derTlv(int tag, byte[] value) {
+        var out = new java.io.ByteArrayOutputStream();
+        out.write(tag);
+        int len = value.length;
+        if (len < 0x80) {
+            out.write(len);
+        } else {
+            int n = (32 - Integer.numberOfLeadingZeros(len) + 7) / 8;
+            out.write(0x80 | n);
+            for (int i = n - 1; i >= 0; i--) out.write((len >>> (8 * i)) & 0xff);
+        }
+        out.writeBytes(value);
+        return out.toByteArray();
     }
 
     private void verifyRows(List<String> hosts, String port) {
@@ -501,7 +585,7 @@ public class ScyllaLoader implements Runnable {
                         row.getLong("last_updated_millis"),
                         row.getInt("ttl")
                     );
-                    logger.info("     TTL(ttl) remaining (seconds)={}, WRITETIME(chunk_path) (epoch ms)={}",
+                    logger.info("     TTL(ttl) remaining (seconds)={}, WRITETIME(chunk_path) (epoch µs)={}",
                         row.getInt("ttl_remaining"),
                         row.getLong("path_writetime")
                     );
@@ -516,17 +600,19 @@ public class ScyllaLoader implements Runnable {
 
     private void createSchema(CqlSession session) {
         String dcName = (dc != null && !dc.isEmpty()) ? dc : "dc1";
+        int replicationFactor = rf > 0 ? rf : autoReplicationFactor(session, dcName);
         StringBuilder keyspaceCql = new StringBuilder()
             .append("CREATE KEYSPACE IF NOT EXISTS ").append(keyspace)
             .append(" WITH replication = {'class': 'NetworkTopologyStrategy', '")
-            .append(dcName).append("': 3} AND durable_writes = true");
+            .append(dcName).append("': ").append(replicationFactor).append("} AND durable_writes = true");
         
         if (tablets) {
             keyspaceCql.append(" AND tablets = { 'enabled': true }");
         }
         
         session.execute(keyspaceCql.toString());
-        logger.info("✅ Created keyspace {} (tablets={})", keyspace, tablets ? "enabled" : "disabled");
+        logger.info("✅ Created keyspace {} (RF={} in {}, tablets={})", keyspace, replicationFactor, dcName,
+            tablets ? "enabled" : "disabled");
 
         // ✅ NEW: Matches exact schema from your CREATE TABLE
         String tableCql = """
@@ -542,6 +628,22 @@ public class ScyllaLoader implements Runnable {
             """.formatted(keyspace, table, COMPRESSION);
         session.execute(tableCql);
         logger.info("✅ Created table {}.{} (new data model)", keyspace, table);
+    }
+
+    // Tablet keyspaces must have RF equal to the DC's rack count (rf_rack_valid_keyspaces),
+    // so derive it from the driver's view of the topology instead of assuming 3 racks.
+    private int autoReplicationFactor(CqlSession session, String dcName) {
+        var dcNodes = session.getMetadata().getNodes().values().stream()
+            .filter(n -> dcName.equals(n.getDatacenter()))
+            .toList();
+        if (dcNodes.isEmpty()) {
+            logger.warn("No nodes found in DC {} - defaulting RF to 3 (use --rf to override)", dcName);
+            return 3;
+        }
+        long racks = dcNodes.stream().map(n -> n.getRack()).distinct().count();
+        int auto = tablets ? (int) racks : Math.min(3, dcNodes.size());
+        logger.info("Auto RF={} ({} nodes, {} racks in {})", auto, dcNodes.size(), racks, dcName);
+        return auto;
     }
 
     private void dropTable(CqlSession session) {

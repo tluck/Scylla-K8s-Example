@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
 mode=${1:-concurrent}
-ver=5.0
+jar=$(ls target/scylla-loader-*.jar 2>/dev/null | grep -v original | head -1)
+[[ -z $jar ]] && { echo "No jar in target/ - run: mvn clean package" >&2; exit 1; }
+ver=$(basename "$jar" .jar); ver=${ver#scylla-loader-}
 
-java -jar target/scylla-loader-${ver}.jar \
-  -k mercado \
+java -jar "$jar" \
+  -k mykeyspace \
   -t userid \
   -u ${USERNAME:-cassandra} \
   -p ${PASSWORD:-cassandra} \

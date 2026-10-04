@@ -36,7 +36,7 @@ if [[ ${1:-} == '-d' || ${1:-} == '-x' ]]; then
     kubectl -n scylla-operator delete --ignore-not-found -f "${operatorUrl}"
   fi
 
-  [[ ${minioEnabled} == true ]] && ./deployMinio.bash ${1}
+  [[ ${seaweedfsEnabled} == true ]] && ./deploySeaweedfs.bash ${1}
 
   if [[ ${1} == '-x' ]]; then
     kubectl delete ns ${scyllaMonitoringNamespace}
@@ -65,7 +65,6 @@ printf "Import/Update Helm Repos\n"
 helm repo add scylla           	    https://scylla-operator-charts.storage.googleapis.com/stable
 helm repo add jetstack            	https://charts.jetstack.io                                  
 helm repo add prometheus-community	https://prometheus-community.github.io/helm-charts          
-helm repo add minio-operator      	https://operator.min.io    
 helm repo update
 
 if [[ ${cloudProvider} == "docker" ]]; then
@@ -259,7 +258,7 @@ kubectl -n=local-csi-driver apply --server-side \
 kubectl -n=local-csi-driver rollout status --timeout=10m daemonset.apps/local-csi-driver
 fi
 
-[[ ${minioEnabled} == true ]] && ./deployMinio.bash ${1}
+[[ ${seaweedfsEnabled} == true ]] && ./deploySeaweedfs.bash ${1}
 fi
 
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'

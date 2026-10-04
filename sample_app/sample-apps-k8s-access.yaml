@@ -1,0 +1,72 @@
+# ServiceAccount and Kubernetes access for the sample app pods
+# (python-application and java-application).
+#
+# The pods used to borrow ${clusterName}-member, the account the operator creates
+# for the ScyllaDB pods. That tied the apps to a deployed ScyllaCluster - the
+# account does not exist until the operator reconciles one - and every rule added
+# for the apps also widened what the ScyllaDB sidecars may do. The apps now run as
+# their own `sample-apps` account, so they can be deployed before the operator
+# and the database, and this file is the complete list of what they can do.
+#
+# _deploy_python-apps_k8s.bash and _deploy_java-apps_k8s.bash apply it with the
+# pod, so normally there is nothing to do by hand. To apply it on its own:
+#
+#   kubectl -n scylla-dc1 apply -f sample-apps-k8s-access.yaml
+#
+# The namespace comes from `kubectl -n`; nothing in this file names one.
+#
+# pods/exec is deliberately NOT here: exec would be arbitrary command execution
+# inside privileged ScyllaDB containers, and nothing needs it - convert_to_tablets.py
+# drives the migration over ScyllaDB's REST API on port 10000 instead. Reading
+# the ScyllaDB CRs (scyllaclusters, scylladbdatacenters, ...) is left out for the
+# same reason: add it deliberately if you write a script that wants it.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sample-apps
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sample-apps-k8s-access
+rules:
+  # TLS material the operator issues for the cluster, fetched by name from inside
+  # the pod: get_certs_k8s.bash (<cluster>-client-certs, -local-user-admin,
+  # -local-serving-ca) and alternator-boto3/get_alternator_rootCA_k8s.bash
+  # (<cluster>-alternator-local-serving-ca). Only `get` - nothing lists secrets.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+  # convert_to_tablets.py maps node IPs to pods (list), follows a restarted pod
+  # to its new IP (get), and restarts a node by deleting its pod. ScyllaDB's
+  # /storage_service/stop_daemon is in its swagger but answers 500 "API call is
+  # not supported yet" (checked on 2026.3.1), and nothing else in its REST API
+  # stops the process - so deleting the pod is the only restart available to a
+  # script running in the cluster.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  # Read a node's logs when it does not come back from that restart. The
+  # storage upgrade happens while ScyllaDB is offline during startup, so a node
+  # that stays down has its reason in the `scylla` container's log.
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list"]
+  # Why a recreated pod is not starting at all - image pulls, scheduling,
+  # volumes. None of that shows up in the ScyllaDB API.
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sample-apps-k8s-access
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sample-apps-k8s-access
+subjects:
+  - kind: ServiceAccount
+    name: sample-apps

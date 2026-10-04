@@ -15,6 +15,9 @@ override.tf.json
 # Python
 __pycache__/
 
+# Maven build output
+target/
+
 # Git
 .git*
 
