@@ -26,7 +26,10 @@ check_app_node() {
 # has created the namespace itself.
 ensure_app_prereqs() {
   check_app_node || return 1
-  kubectl create namespace "${clusterNamespace}" --dry-run=client -o yaml | kubectl apply -f - || return 1
+  # create-if-missing, like deployScylla.bash - `kubectl apply` on a namespace made by
+  # `kubectl create` warns about the missing last-applied-configuration annotation
+  kubectl get namespace "${clusterNamespace}" > /dev/null 2>&1 \
+    || kubectl create namespace "${clusterNamespace}" || return 1
   kubectl -n "${clusterNamespace}" apply -f "${SCRIPT_DIR}/sample-apps-k8s-access.yaml" || return 1
 }
 
