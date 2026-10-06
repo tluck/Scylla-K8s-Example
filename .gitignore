@@ -72,6 +72,8 @@ test*
 my*
 docker-compose*
 gcs-service-account.json
+# Local OKE settings (tenancy/compartment OCIDs); copy from oke.conf.example
+makeK8s_OKE/oke.conf
 scylla*.yaml
 nodeconfig.yaml
 config/
