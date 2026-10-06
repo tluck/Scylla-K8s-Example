@@ -1,5 +1,7 @@
 # Required OCI target. Copy this file to oke.conf and replace these values.
-OCI_REGION="us-sanjose-1"
+# OKE's Dense I/O shapes differ by region: us-sanjose-1 offers only the older
+# DenseIO2 family, while us-phoenix-1 offers DenseIO.E4 and DenseIO.E5.
+OCI_REGION="us-phoenix-1"
 OCI_COMPARTMENT_OCID="ocid1.compartment.oc1..replace-me"
 
 # OCI CLI profile and resource names.
@@ -23,11 +25,12 @@ GENERAL_NODE_ARCH="X86_64"
 GENERAL_NODE_IMAGE_OCID=""
 
 # Dedicated ScyllaDB pool. Dense I/O shapes provide the local NVMe devices
-# consumed by local-csi-driver/nodeconfigOKE.yaml. VM.DenseIO2.8 is a fixed
-# x86 shape; the OCPU/memory values below are ignored for non-Flex shapes.
-SCYLLA_NODE_SHAPE="VM.DenseIO2.8"
+# consumed by local-csi-driver/nodeconfigOKE.yaml. VM.DenseIO.E5.Flex is an x86
+# Flex shape sized in steps of 8 OCPUs, 96 GB, and one 6.8 TB NVMe drive, from
+# 8:96 up to 48:576 OCPU:memory.
+SCYLLA_NODE_SHAPE="VM.DenseIO.E5.Flex"
 SCYLLA_NODE_OCPUS=8
-SCYLLA_NODE_MEMORY_GBS=128
+SCYLLA_NODE_MEMORY_GBS=96
 # The repository deploys three one-member racks, one per OCI fault domain.
 SCYLLA_NODE_COUNT=3
 SCYLLA_NODE_ARCH="X86_64"
@@ -38,20 +41,20 @@ SCYLLA_NODE_AD=""
 # All three distinct fault domains are required; the script rejects a reduced
 # list because the repository deploys one Scylla rack per fault domain.
 SCYLLA_NODE_FAULT_DOMAINS_JSON='["FAULT-DOMAIN-1","FAULT-DOMAIN-2","FAULT-DOMAIN-3"]'
-# The script automatically checks dense-io2-core-count at 8 units per node for
-# VM.DenseIO2.8 and refuses to create a partial pool when fewer than 24 units
-# are available. DenseIO.E4 and DenseIO.E5 shapes are also mapped to their OCI
-# core limits automatically. For any other family, set that family's OCI limit
-# name and units consumed per node so the same preflight can run.
-# SCYLLA_NODE_LIMIT_NAME="dense-io2-core-count"
+# The script automatically checks dense-io-e5-core-count at SCYLLA_NODE_OCPUS
+# units per node for VM.DenseIO.E5.Flex and refuses to create a partial pool
+# when fewer than 24 units (three nodes at 8 OCPUs) are available. DenseIO2 and
+# DenseIO.E4 shapes are also mapped to their OCI core limits automatically. For
+# any other family, set that family's OCI limit name and units consumed per node
+# so the same preflight can run.
+# SCYLLA_NODE_LIMIT_NAME="dense-io-e5-core-count"
 # SCYLLA_NODE_LIMIT_UNITS_PER_NODE=8
 #
-# Example regional fallback when live OKE options and limit availability show
-# VM.DenseIO.E5.Flex with at least 24 dense-io-e5-core-count units:
-# OCI_REGION="us-phoenix-1"
-# SCYLLA_NODE_SHAPE="VM.DenseIO.E5.Flex"
+# Previous-generation VM alternative with more memory per OCPU, sized 8:128,
+# 16:256, or 32:512 OCPU:memory and checked against dense-io-e4-core-count:
+# SCYLLA_NODE_SHAPE="VM.DenseIO.E4.Flex"
 # SCYLLA_NODE_OCPUS=8
-# SCYLLA_NODE_MEMORY_GBS=96
+# SCYLLA_NODE_MEMORY_GBS=128
 
 # Optional x86 application pool, matching nodeSelector2=application in init.conf.
 CREATE_APPLICATION_POOL=false
