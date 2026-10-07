@@ -4,9 +4,9 @@
 
 - a VCN with a public control-plane subnet, private worker/pod subnet, and public load-balancer subnet;
 - an OKE Enhanced Cluster with VCN-native pod networking;
-- a general-purpose node pool labeled `scylla-operator`;
+- a three-node general-purpose pool labeled `scylla-operator` (`GENERAL_NODE_COUNT`);
 - a three-node Dense I/O pool labeled and tainted for ScyllaDB, spread across the three OCI fault domains;
-- an optional application pool labeled and tainted for the sample applications.
+- an arm64 (Ampere `VM.Standard.A1.Flex`) application pool labeled and tainted for the sample applications, matching the GKE and EKS three-pool layout. Set `CREATE_APPLICATION_POOL=false` to skip it.
 
 The dedicated pool's cloud-init enables the kubelet static CPU manager policy. All pools disable the legacy IMDSv1 endpoint and use IMDSv2. The Dense I/O pool's local NVMe devices are prepared later by `setupK8s.bash` using `local-csi-driver/nodeconfigOKE.yaml`.
 
@@ -25,7 +25,7 @@ $EDITOR makeK8s_OKE/oke.conf
 ./makeK8s_OKE/makeBasicCluster.bash
 ```
 
-`OCI_REGION` and `OCI_COMPARTMENT_OCID` are required. The Kubernetes version and availability domain are discovered when left empty. The script uses the OCI profile selected by `OCI_CLI_PROFILE`, waits for every OCI operation that later steps depend on, creates kubeconfig with OCI token version 2.0.0, embeds the selected OCI profile in its exec credentials, and renames the context to `${OKE_CLUSTER_NAME}-oke`. It writes to the single file named by `KUBECONFIG`, or to `${HOME}/.kube/config` when `KUBECONFIG` is unset.
+`OCI_REGION` is required. When `OCI_COMPARTMENT_OCID` is empty in both `oke.conf` and the environment, the script looks for an ACTIVE compartment named `OCI_COMPARTMENT_NAME` (default: `OKE_CLUSTER_NAME`) under `OCI_COMPARTMENT_PARENT_OCID` (default: the tenancy root, read from `OCI_TENANCY_OCID`, `OCI_CLI_TENANCY`, or the selected profile in `~/.oci/config`). A create or `--resume` run creates that compartment in the tenancy home region when it is missing, waits until `OCI_REGION` accepts it, and prints its OCID so it can be pinned in `oke.conf`; `--preflight` and `-d` only look it up. Teardown leaves the compartment in place. Creating a compartment requires `manage compartments` on the parent. The Kubernetes version and availability domain are discovered when left empty. The script uses the OCI profile selected by `OCI_CLI_PROFILE`, waits for every OCI operation that later steps depend on, creates kubeconfig with OCI token version 2.0.0, embeds the selected OCI profile in its exec credentials, and renames the context to `${OKE_CLUSTER_NAME}-oke`. It writes to the single file named by `KUBECONFIG`, or to `${HOME}/.kube/config` when `KUBECONFIG` is unset.
 
 To run the name/context collision checks without creating anything:
 
@@ -65,7 +65,15 @@ Every waited OKE work request is checked directly. If OCI reports `FAILED`, the 
 
 The public API and load-balancer CIDRs default to `0.0.0.0/0` for an immediately usable example. Restrict `API_INGRESS_CIDR` and `LOAD_BALANCER_INGRESS_CIDR` in `oke.conf` for production use.
 
-The optional application pool is disabled by default and uses an x86 shape/image when enabled. The sample application scripts already target its `application` node label; ensure the application images support `amd64`, or extend the provisioning script with a matching OKE aarch64 image before choosing an Arm application shape.
+The application pool is created by default on `VM.Standard.A1.Flex` at 8 OCPUs and 32 GB with an OKE aarch64 OL8 image, the OCI counterpart of the GKE `c4a-standard-8` pool. The sample-app images are built for `linux/amd64` and `linux/arm64`, and the app pods tolerate both the `application` taint and `kubernetes.io/arch=arm64`. `VM.Standard.A4.Flex` is the newer Ampere option; for x86 set `APPLICATION_NODE_SHAPE="VM.Standard.E4.Flex"` and `APPLICATION_NODE_ARCH="X86_64"`. To add the pool to a cluster created without it, run `--resume`.
+
+| Pool | `scylla.scylladb.com/node-type` | Taint (`scylla-operator.scylladb.com/dedicated`) | `init.conf` | Used by |
+| --- | --- | --- | --- | --- |
+| `system` | `scylla-operator` (`GENERAL_NODE_TYPE`) | none | `nodeSelector0` | cert-manager, Prometheus stack, operator, monitoring, Manager, SeaweedFS |
+| `scylla` | `scylla` (`SCYLLA_NODE_TYPE`) | `scyllaclusters:NoSchedule` | `nodeSelector1` | ScyllaCluster, `nodeconfigOKE.yaml` |
+| `application` | `application` (`APPLICATION_NODE_TYPE`) | `application:NoSchedule` | `nodeSelector2` | sample apps |
+
+The labels must stay equal to `nodeSelector0/1/2` in `../init.conf`; the script refuses labels that are not distinct, because it taints the Scylla and application pools by label.
 
 After creation, return to the repository root:
 
@@ -102,7 +110,7 @@ If creation stops after the cluster or some node pools are active, fix the confi
 ./makeK8s_OKE/makeBasicCluster.bash --resume
 ```
 
-Resume requires exactly one live tagged ACTIVE cluster and one live tagged AVAILABLE VCN, rediscovers every expected AVAILABLE network resource, verifies the existing cluster version/state, reuses ACTIVE same-named node pools, and creates only missing pools. For a non-ACTIVE same-named pool, it retrieves the latest associated work request. A failed request and its OCI errors/logs are reported even when the pool still says `CREATING`; the script never deletes, replaces, or adopts that partial pool automatically. A fully deleted deployment is not resumable; use a normal create, even if OCI still returns terminal records for its old name. A normal rerun detects genuinely live resources and directs you to `--resume` or teardown.
+Resume requires exactly one live tagged ACTIVE cluster and one live tagged AVAILABLE VCN, rediscovers every expected AVAILABLE network resource, verifies the existing cluster version/state, reuses ACTIVE same-named node pools (scaling the system and application pools to `GENERAL_NODE_COUNT` / `APPLICATION_NODE_COUNT`), and creates only missing pools. For a non-ACTIVE same-named pool, it retrieves the latest associated work request. A failed request and its OCI errors/logs are reported even when the pool still says `CREATING`; the script never deletes, replaces, or adopts that partial pool automatically. A fully deleted deployment is not resumable; use a normal create, even if OCI still returns terminal records for its old name. A normal rerun detects genuinely live resources and directs you to `--resume` or teardown.
 
 For a Dense I/O service-limit failure, preserve the ACTIVE cluster and system pool. Request enough AD-scoped limit for all other tenancy usage plus the full three-node Scylla pool, or free equivalent usage. If the standard form omits the limit, use Subscription `None` and the support path described above rather than assuming the limit is non-adjustable. If OCI is still reconciling the partial pool, wait for it to become `ACTIVE` and rerun `--resume`. To change the shape or availability domain in the same region, first verify the replacement through `oci ce node-pool-options get`, set the matching `SCYLLA_NODE_*` values, explicitly delete only the failed node pool by its OCID, wait for that delete work request to succeed, and then rerun `--resume`. Moving to another region requires recreating the regional OKE cluster there; an existing OKE cluster cannot attach a node pool from another region. Do not use the repository-wide `-d` path for same-region recovery because it removes the working cluster and system pool.
 

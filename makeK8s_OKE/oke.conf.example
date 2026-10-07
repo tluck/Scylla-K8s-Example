@@ -1,8 +1,14 @@
-# Required OCI target. Copy this file to oke.conf and replace these values.
+# Required OCI target. Copy this file to oke.conf and set the region.
 # OKE's Dense I/O shapes differ by region: us-sanjose-1 offers only the older
 # DenseIO2 family, while us-phoenix-1 offers DenseIO.E4 and DenseIO.E5.
 OCI_REGION="us-phoenix-1"
-OCI_COMPARTMENT_OCID="ocid1.compartment.oc1..replace-me"
+# Leave OCI_COMPARTMENT_OCID empty to have the script find or create the
+# compartment named OCI_COMPARTMENT_NAME (default: OKE_CLUSTER_NAME) under
+# OCI_COMPARTMENT_PARENT_OCID (default: the tenancy root). Set it to deploy
+# into an existing compartment instead.
+OCI_COMPARTMENT_OCID="${OCI_COMPARTMENT_OCID:-}"
+# OCI_COMPARTMENT_NAME="scylladb-demo"
+# OCI_COMPARTMENT_PARENT_OCID=""
 
 # OCI CLI profile and resource names.
 OCI_CLI_PROFILE="DEFAULT"
@@ -18,7 +24,7 @@ OCI_AD=""
 GENERAL_NODE_SHAPE="VM.Standard.E4.Flex"
 GENERAL_NODE_OCPUS=4
 GENERAL_NODE_MEMORY_GBS=32
-GENERAL_NODE_COUNT=1
+GENERAL_NODE_COUNT=3
 GENERAL_NODE_ARCH="X86_64"
 # Optional OKE image OCID override. Empty selects the newest non-GPU OL8 image
 # returned for this Kubernetes version/architecture and validates the shape.
@@ -56,14 +62,24 @@ SCYLLA_NODE_FAULT_DOMAINS_JSON='["FAULT-DOMAIN-1","FAULT-DOMAIN-2","FAULT-DOMAIN
 # SCYLLA_NODE_OCPUS=8
 # SCYLLA_NODE_MEMORY_GBS=128
 
-# Optional x86 application pool, matching nodeSelector2=application in init.conf.
-CREATE_APPLICATION_POOL=false
-APPLICATION_NODE_SHAPE="VM.Standard.E4.Flex"
-APPLICATION_NODE_OCPUS=2
-APPLICATION_NODE_MEMORY_GBS=16
+# Third pool for the sample apps (nodeSelector2=application in init.conf),
+# tainted scylla-operator.scylladb.com/dedicated=application:NoSchedule.
+# Ampere arm64 by default, like the GKE c4a-standard-8 pool; the sample-app
+# images are built for linux/amd64 and linux/arm64. VM.Standard.A4.Flex is the
+# newer Ampere option. For x86 use VM.Standard.E4.Flex with X86_64.
+CREATE_APPLICATION_POOL=true
+APPLICATION_NODE_SHAPE="VM.Standard.A1.Flex"
+APPLICATION_NODE_OCPUS=8
+APPLICATION_NODE_MEMORY_GBS=32
 APPLICATION_NODE_COUNT=1
-APPLICATION_NODE_ARCH="X86_64"
+APPLICATION_NODE_ARCH="AARCH64"
 APPLICATION_NODE_IMAGE_OCID=""
+
+# Pool labels (scylla.scylladb.com/node-type). They must equal nodeSelector0/1/2
+# in ../init.conf, which every template selects on; change both together.
+# GENERAL_NODE_TYPE="scylla-operator"
+# SCYLLA_NODE_TYPE="scylla"
+# APPLICATION_NODE_TYPE="application"
 
 NODE_BOOT_VOLUME_GBS=100
 

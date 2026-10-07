@@ -52,8 +52,17 @@ else
 fi
 
 # update the existing repair task with new credentials and properties
-printf "\nUpdating the existing repair task for vnodes only and intensity 0\n"
-kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool repair update -c ${clusterNamespace}/${clusterName} --keyspace-replication=vnodes --intensity=0 --parallel=0 repair/weekly
+# the operator re-creates repair/weekly some time after the registration above is re-created - wait for it
+for ((i = 0; i < 24; i++)); do
+  kubectl -n ${scyllaManagerNamespace} exec service/scylla-manager -c scylla-manager -- sctool tasks --cluster ${clusterNamespace}/${clusterName} 2>/dev/null | grep -q " repair/weekly " && break
+  sleep 5
+done
+if (( i < 24 )); then
+  printf "\nUpdating the existing repair task for vnodes only and intensity 0\n"
+  kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool repair update -c ${clusterNamespace}/${clusterName} --keyspace-replication=vnodes --intensity=0 --parallel=0 repair/weekly
+else
+  printf "\n* * * repair/weekly did not appear within 120s - skipping its update; re-run ./update_scylla_manager.bash later\n"
+fi
 
 # dump out the tasks for the cluster
 kubectl -n ${scyllaManagerNamespace} exec -it service/scylla-manager -c scylla-manager -- sctool tasks --cluster ${clusterNamespace}/${clusterName} --show-properties | grep -v '^+---' | cut -d'|' -f2,4-14

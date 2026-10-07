@@ -55,6 +55,10 @@ run_kubectl() {
   fi
 }
 
+node_type_label() {
+  jq -cn --arg key "${NODE_TYPE_LABEL}" --arg value "$1" '[{key:$key,value:$value}]'
+}
+
 validate_positive_integer() {
   [[ $2 =~ ^[1-9][0-9]*$ ]] || die "$1 must be a positive integer (got '$2')"
 }
@@ -128,6 +132,103 @@ lookup_cluster() {
   OKE_CLUSTER_STATE=$(jq -r '.[0].state // empty' <<< "${ownedRecords}")
 }
 
+lookup_tenancy_ocid() {
+  local configPath="${OCI_CLI_CONFIG_FILE:-${HOME}/.oci/config}"
+  local tenancy="${OCI_TENANCY_OCID:-${OCI_CLI_TENANCY:-}}"
+  if [[ -z ${tenancy} && -r ${configPath} ]]; then
+    tenancy=$(awk -v profile="[${OCI_CLI_PROFILE}]" '
+      $0 == profile { inProfile = 1; next }
+      /^\[/ { inProfile = 0 }
+      inProfile && /^[ \t]*tenancy[ \t]*=/ { sub(/^[^=]*=[ \t]*/, ""); print; exit }
+    ' "${configPath}")
+  fi
+  [[ ${tenancy} == ocid1.tenancy.* ]] \
+    || die "could not determine the tenancy OCID for profile ${OCI_CLI_PROFILE}; set OCI_TENANCY_OCID or OCI_COMPARTMENT_OCID"
+  printf '%s' "${tenancy}"
+}
+
+# Find the ACTIVE compartment named OCI_COMPARTMENT_NAME under its parent.
+# Prints the OCID, or nothing when it does not exist.
+lookup_named_compartment() {
+  local raw
+  local matching
+  capture_oci raw iam compartment list \
+    --compartment-id "${OCI_COMPARTMENT_PARENT_OCID}" \
+    --name "${OCI_COMPARTMENT_NAME}" \
+    --all \
+    --output json
+  [[ -n ${raw} ]] || raw='{"data":[]}'
+  matching=$(jq -r --arg name "${OCI_COMPARTMENT_NAME}" '
+    [(.data // [])[] | select(.name == $name)] as $all
+    | if any($all[]; ."lifecycle-state" == "CREATING" or ."lifecycle-state" == "DELETING")
+      then "TRANSITIONING"
+      else ([$all[] | select(."lifecycle-state" == "ACTIVE") | .id] | first // "")
+      end' <<< "${raw}") \
+    || die "could not parse OCI compartment discovery"
+  [[ ${matching} != "TRANSITIONING" ]] \
+    || die "compartment ${OCI_COMPARTMENT_NAME} is being created or deleted; retry when it settles"
+  printf '%s' "${matching}"
+}
+
+# A new compartment is ACTIVE in the identity home region before other regions
+# accept it; poll a cheap regional list until the target region does.
+wait_for_compartment_in_region() {
+  local attempt
+  for ((attempt = 1; attempt <= OCI_COMPARTMENT_READY_ATTEMPTS; attempt++)); do
+    if oci network vcn list --region "${OCI_REGION}" \
+        --compartment-id "${OCI_COMPARTMENT_OCID}" --limit 1 \
+        --profile "${OCI_CLI_PROFILE}" > /dev/null 2>&1; then
+      return 0
+    fi
+    printf "Waiting for compartment %s to propagate to %s (%d/%d)\n" \
+      "${OCI_COMPARTMENT_NAME}" "${OCI_REGION}" "${attempt}" "${OCI_COMPARTMENT_READY_ATTEMPTS}"
+    sleep "${OCI_COMPARTMENT_READY_DELAY_SECONDS}"
+  done
+  die "compartment ${OCI_COMPARTMENT_NAME} (${OCI_COMPARTMENT_OCID}) is not yet usable in ${OCI_REGION}; rerun with --resume shortly"
+}
+
+# Resolve OCI_COMPARTMENT_OCID when neither oke.conf nor the environment set it.
+# Mode "create" creates the named compartment when missing; mode "lookup" only
+# finds it and leaves OCI_COMPARTMENT_OCID empty when it does not exist.
+resolve_compartment() {
+  local mode=$1
+  local tenancyOcid
+  local homeRegion
+  [[ -z ${OCI_COMPARTMENT_OCID} ]] || return 0
+
+  tenancyOcid=$(lookup_tenancy_ocid) || exit 1
+  OCI_COMPARTMENT_PARENT_OCID="${OCI_COMPARTMENT_PARENT_OCID:-${tenancyOcid}}"
+  OCI_COMPARTMENT_OCID=$(lookup_named_compartment) || exit 1
+  if [[ -n ${OCI_COMPARTMENT_OCID} ]]; then
+    printf "Using compartment %s (%s)\n" "${OCI_COMPARTMENT_NAME}" "${OCI_COMPARTMENT_OCID}"
+    return 0
+  fi
+  [[ ${mode} == create ]] || return 0
+
+  # IAM writes must go to the tenancy's home region.
+  capture_oci homeRegion iam region-subscription list \
+    --tenancy-id "${tenancyOcid}" \
+    --query 'data[?"is-home-region"]|[0]."region-name"' \
+    --raw-output
+  [[ -n ${homeRegion} ]] || die "could not determine the tenancy home region"
+
+  printf "Creating compartment %s in %s\n" "${OCI_COMPARTMENT_NAME}" "${OCI_COMPARTMENT_PARENT_OCID}"
+  capture_oci OCI_COMPARTMENT_OCID iam compartment create \
+    --region "${homeRegion}" \
+    --compartment-id "${OCI_COMPARTMENT_PARENT_OCID}" \
+    --name "${OCI_COMPARTMENT_NAME}" \
+    --description "ScyllaDB OKE cluster ${OKE_CLUSTER_NAME} (Scylla-K8s-Example)" \
+    --freeform-tags "${OKE_RESOURCE_TAGS}" \
+    --wait-for-state ACTIVE \
+    --query 'data.id' \
+    --raw-output
+  [[ ${OCI_COMPARTMENT_OCID} == ocid1.compartment.* ]] \
+    || die "OCI did not return a compartment OCID for ${OCI_COMPARTMENT_NAME}"
+  printf "Created compartment %s (%s)\n" "${OCI_COMPARTMENT_NAME}" "${OCI_COMPARTMENT_OCID}"
+  printf "Set OCI_COMPARTMENT_OCID=\"%s\" in %s to pin it\n" "${OCI_COMPARTMENT_OCID}" "${configFile}"
+  wait_for_compartment_in_region
+}
+
 preflight_create() {
   local targetContext="${OKE_CLUSTER_NAME}-oke"
   if kubectl config get-contexts -o name 2>/dev/null | grep -Fxq "${targetContext}"; then
@@ -150,6 +251,33 @@ require_active_node_pool() {
     fi
     die "OKE node pool ${poolName} did not become ACTIVE (state: ${poolState:-missing})"
   fi
+}
+
+# Resume reuses ACTIVE pools; scale them to the configured size. Existing nodes are
+# kept when growing, and OKE picks which nodes to remove when shrinking.
+reconcile_node_pool_size() {
+  local poolName=$1
+  local poolOcid=$2
+  local desired=$3
+  local current
+  capture_oci current ce node-pool get \
+    --region "${OCI_REGION}" \
+    --node-pool-id "${poolOcid}" \
+    --query 'data."node-config-details".size' \
+    --raw-output
+  [[ ${current} == "${desired}" ]] && return 0
+  printf "Resizing %s node pool from %s to %s nodes\n" "${poolName}" "${current:-unknown}" "${desired}"
+  run_oke_work_request "OKE ${poolName} node-pool resize" ce node-pool update \
+    --region "${OCI_REGION}" \
+    --node-pool-id "${poolOcid}" \
+    --size "${desired}" \
+    --force \
+    --max-wait-seconds 1800 \
+    --wait-interval-seconds 30 \
+    --wait-for-state SUCCEEDED \
+    --wait-for-state FAILED \
+    || die "${OKE_WORK_REQUEST_ERROR}"
+  require_active_node_pool "${poolName}"
 }
 
 lookup_node_pool_state() {
@@ -723,6 +851,7 @@ create_oke() {
   lookup_node_pool_state existingSystemPoolState existingSystemPoolOcid system
   if [[ ${existingSystemPoolState} == "ACTIVE" ]]; then
     printf "Reusing ACTIVE system node pool\n"
+    reconcile_node_pool_size system "${existingSystemPoolOcid}" "${GENERAL_NODE_COUNT}"
   elif [[ -n ${existingSystemPoolState} ]]; then
     if ! oke_guard_node_pool_resume system "${existingSystemPoolOcid}" \
         "${existingSystemPoolState}"; then
@@ -745,7 +874,7 @@ create_oke() {
       --placement-configs "[{\"availabilityDomain\":\"${OCI_AD}\",\"subnetId\":\"${OKE_WORKERS_SUBNET_OCID}\"}]" \
       --pod-subnet-ids "[\"${OKE_WORKERS_SUBNET_OCID}\"]" \
       --size "${GENERAL_NODE_COUNT}" \
-      --initial-node-labels '[{"key":"scylla.scylladb.com/node-type","value":"scylla-operator"}]' \
+      --initial-node-labels "$(node_type_label "${GENERAL_NODE_TYPE}")" \
       --node-metadata '{"areLegacyImdsEndpointsDisabled":"true"}' \
       --max-wait-seconds 1800 \
       --wait-interval-seconds 30 \
@@ -792,7 +921,7 @@ EOF
       --placement-configs "${SCYLLA_PLACEMENT_CONFIGS}" \
       --pod-subnet-ids "[\"${OKE_WORKERS_SUBNET_OCID}\"]" \
       --size "${SCYLLA_NODE_COUNT}" \
-      --initial-node-labels '[{"key":"scylla.scylladb.com/node-type","value":"scylla"}]' \
+      --initial-node-labels "$(node_type_label "${SCYLLA_NODE_TYPE}")" \
       --node-metadata "{\"user_data\":\"${CLOUD_INIT_BASE64}\",\"areLegacyImdsEndpointsDisabled\":\"true\"}" \
       --max-wait-seconds 1800 \
       --wait-interval-seconds 30 \
@@ -807,6 +936,7 @@ EOF
       existingApplicationPoolOcid application
     if [[ ${existingApplicationPoolState} == "ACTIVE" ]]; then
       printf "Reusing ACTIVE application node pool\n"
+      reconcile_node_pool_size application "${existingApplicationPoolOcid}" "${APPLICATION_NODE_COUNT}"
     elif [[ -n ${existingApplicationPoolState} ]]; then
       if ! oke_guard_node_pool_resume application \
           "${existingApplicationPoolOcid}" "${existingApplicationPoolState}"; then
@@ -829,7 +959,7 @@ EOF
         --placement-configs "[{\"availabilityDomain\":\"${OCI_AD}\",\"subnetId\":\"${OKE_WORKERS_SUBNET_OCID}\"}]" \
         --pod-subnet-ids "[\"${OKE_WORKERS_SUBNET_OCID}\"]" \
         --size "${APPLICATION_NODE_COUNT}" \
-        --initial-node-labels '[{"key":"scylla.scylladb.com/node-type","value":"application"}]' \
+        --initial-node-labels "$(node_type_label "${APPLICATION_NODE_TYPE}")" \
         --node-metadata '{"areLegacyImdsEndpointsDisabled":"true"}' \
         --max-wait-seconds 1800 \
         --wait-interval-seconds 30 \
@@ -863,17 +993,19 @@ EOF
     run_kubectl config use-context "${targetContext}"
   fi
   run_kubectl wait --for=condition=Ready nodes --all --timeout=20m
-  run_kubectl taint nodes -l scylla.scylladb.com/node-type=scylla \
+  # Taint values match the tolerations in templateCluster.yaml, nodeconfigOKE.yaml
+  # (scyllaclusters) and the sample-app pods (application).
+  run_kubectl taint nodes -l "${NODE_TYPE_LABEL}=${SCYLLA_NODE_TYPE}" \
     scylla-operator.scylladb.com/dedicated=scyllaclusters:NoSchedule --overwrite
   if [[ ${CREATE_APPLICATION_POOL} == true ]]; then
-    run_kubectl taint nodes -l scylla.scylladb.com/node-type=application \
+    run_kubectl taint nodes -l "${NODE_TYPE_LABEL}=${APPLICATION_NODE_TYPE}" \
       scylla-operator.scylladb.com/dedicated=application:NoSchedule --overwrite
   fi
 
-  actualScyllaNodes=$(kubectl get nodes -l scylla.scylladb.com/node-type=scylla -o name | wc -l | tr -d ' ')
+  actualScyllaNodes=$(kubectl get nodes -l "${NODE_TYPE_LABEL}=${SCYLLA_NODE_TYPE}" -o name | wc -l | tr -d ' ')
   [[ ${actualScyllaNodes} -eq ${SCYLLA_NODE_COUNT} ]] \
     || die "expected ${SCYLLA_NODE_COUNT} Scylla nodes, found ${actualScyllaNodes}"
-  faultDomainCount=$(kubectl get nodes -l scylla.scylladb.com/node-type=scylla -o json \
+  faultDomainCount=$(kubectl get nodes -l "${NODE_TYPE_LABEL}=${SCYLLA_NODE_TYPE}" -o json \
     | jq -r '.items[].metadata.labels["oci.oraclecloud.com/fault-domain"] // empty' \
     | sort -u | wc -l | tr -d ' ')
   [[ ${faultDomainCount} -eq 3 ]] \
@@ -881,7 +1013,8 @@ EOF
 
   printf "\nOKE cluster %s is ready in context %s\n" "${OKE_CLUSTER_NAME}" "${targetContext}"
   kubectl get nodes \
-    -L scylla.scylladb.com/node-type \
+    -L "${NODE_TYPE_LABEL}" \
+    -L kubernetes.io/arch \
     -L oci.oraclecloud.com/fault-domain
   printf "\nNext: from the repository root run ./setupK8s.bash, then ./deployScylla.bash\n"
 }
@@ -898,21 +1031,34 @@ require_command grep
 source "${configFile}" || die "could not source ${configFile}"
 
 : "${OCI_REGION:?OCI_REGION must be set in ${configFile}}"
-: "${OCI_COMPARTMENT_OCID:?OCI_COMPARTMENT_OCID must be set in ${configFile}}"
 : "${OKE_CLUSTER_NAME:?OKE_CLUSTER_NAME must be set in ${configFile}}"
-[[ ${OCI_COMPARTMENT_OCID} == ocid1.compartment.* && ${OCI_COMPARTMENT_OCID} != *replace-me* ]] \
-  || die "OCI_COMPARTMENT_OCID must be a real compartment OCID"
+# Empty means: find, or create, the compartment named OCI_COMPARTMENT_NAME.
+OCI_COMPARTMENT_OCID="${OCI_COMPARTMENT_OCID:-}"
+if [[ -n ${OCI_COMPARTMENT_OCID} ]]; then
+  [[ ${OCI_COMPARTMENT_OCID} == ocid1.compartment.* && ${OCI_COMPARTMENT_OCID} != *replace-me* ]] \
+    || die "OCI_COMPARTMENT_OCID must be a real compartment OCID, or empty to create one"
+fi
 
 OCI_CLI_PROFILE="${OCI_CLI_PROFILE:-DEFAULT}"
+OCI_COMPARTMENT_NAME="${OCI_COMPARTMENT_NAME:-${OKE_CLUSTER_NAME}}"
+OCI_COMPARTMENT_PARENT_OCID="${OCI_COMPARTMENT_PARENT_OCID:-}"
+OCI_COMPARTMENT_READY_ATTEMPTS="${OCI_COMPARTMENT_READY_ATTEMPTS:-30}"
+OCI_COMPARTMENT_READY_DELAY_SECONDS="${OCI_COMPARTMENT_READY_DELAY_SECONDS:-10}"
 OKE_VCN_NAME="${OKE_VCN_NAME:-${OKE_CLUSTER_NAME}-vcn}"
 OKE_KUBECONFIG_FILE="${KUBECONFIG:-${HOME}/.kube/config}"
 K8S_VERSION="${K8S_VERSION:-}"
 OCI_AD="${OCI_AD:-}"
 SCYLLA_NODE_AD="${SCYLLA_NODE_AD:-}"
+# Node-pool labels: these must equal nodeSelector0/1/2 in the repository's init.conf,
+# which the operator, monitoring, Manager, cluster and sample-app templates select on.
+NODE_TYPE_LABEL="scylla.scylladb.com/node-type"
+GENERAL_NODE_TYPE="${GENERAL_NODE_TYPE:-scylla-operator}"
+SCYLLA_NODE_TYPE="${SCYLLA_NODE_TYPE:-scylla}"
+APPLICATION_NODE_TYPE="${APPLICATION_NODE_TYPE:-application}"
 GENERAL_NODE_SHAPE="${GENERAL_NODE_SHAPE:-VM.Standard.E4.Flex}"
 GENERAL_NODE_OCPUS="${GENERAL_NODE_OCPUS:-4}"
 GENERAL_NODE_MEMORY_GBS="${GENERAL_NODE_MEMORY_GBS:-32}"
-GENERAL_NODE_COUNT="${GENERAL_NODE_COUNT:-1}"
+GENERAL_NODE_COUNT="${GENERAL_NODE_COUNT:-3}"
 GENERAL_NODE_ARCH="${GENERAL_NODE_ARCH:-X86_64}"
 GENERAL_NODE_IMAGE_OCID="${GENERAL_NODE_IMAGE_OCID:-${OKE_NODE_IMAGE_OCID:-}}"
 SCYLLA_NODE_SHAPE="${SCYLLA_NODE_SHAPE:-VM.DenseIO.E5.Flex}"
@@ -945,12 +1091,12 @@ if [[ ${SCYLLA_NODE_LIMIT_UNITS_PER_NODE+x} != x ]]; then
     SCYLLA_NODE_LIMIT_UNITS_PER_NODE="${SCYLLA_NODE_SHAPE##*.}"
   fi
 fi
-CREATE_APPLICATION_POOL="${CREATE_APPLICATION_POOL:-false}"
-APPLICATION_NODE_SHAPE="${APPLICATION_NODE_SHAPE:-VM.Standard.E4.Flex}"
-APPLICATION_NODE_OCPUS="${APPLICATION_NODE_OCPUS:-2}"
-APPLICATION_NODE_MEMORY_GBS="${APPLICATION_NODE_MEMORY_GBS:-16}"
+CREATE_APPLICATION_POOL="${CREATE_APPLICATION_POOL:-true}"
+APPLICATION_NODE_SHAPE="${APPLICATION_NODE_SHAPE:-VM.Standard.A1.Flex}"
+APPLICATION_NODE_OCPUS="${APPLICATION_NODE_OCPUS:-8}"
+APPLICATION_NODE_MEMORY_GBS="${APPLICATION_NODE_MEMORY_GBS:-32}"
 APPLICATION_NODE_COUNT="${APPLICATION_NODE_COUNT:-1}"
-APPLICATION_NODE_ARCH="${APPLICATION_NODE_ARCH:-X86_64}"
+APPLICATION_NODE_ARCH="${APPLICATION_NODE_ARCH:-AARCH64}"
 APPLICATION_NODE_IMAGE_OCID="${APPLICATION_NODE_IMAGE_OCID:-${OKE_NODE_IMAGE_OCID:-}}"
 NODE_BOOT_VOLUME_GBS="${NODE_BOOT_VOLUME_GBS:-100}"
 VCN_CIDR="${VCN_CIDR:-10.0.0.0/16}"
@@ -980,6 +1126,16 @@ validate_positive_integer OKE_DISCOVERY_RETRY_ATTEMPTS "${OKE_DISCOVERY_RETRY_AT
 validate_positive_integer OKE_DISCOVERY_RETRY_DELAY_SECONDS "${OKE_DISCOVERY_RETRY_DELAY_SECONDS}"
 validate_positive_integer OKE_DELETE_MAX_WAIT_SECONDS "${OKE_DELETE_MAX_WAIT_SECONDS}"
 validate_positive_integer OKE_DELETE_WAIT_INTERVAL_SECONDS "${OKE_DELETE_WAIT_INTERVAL_SECONDS}"
+validate_positive_integer OCI_COMPARTMENT_READY_ATTEMPTS "${OCI_COMPARTMENT_READY_ATTEMPTS}"
+validate_positive_integer OCI_COMPARTMENT_READY_DELAY_SECONDS "${OCI_COMPARTMENT_READY_DELAY_SECONDS}"
+for nodeType in "${GENERAL_NODE_TYPE}" "${SCYLLA_NODE_TYPE}" "${APPLICATION_NODE_TYPE}"; do
+  [[ ${nodeType} =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] \
+    || die "node-pool type labels must be lowercase DNS-style names (got '${nodeType}')"
+done
+# Distinct labels: the Scylla and application pools are tainted by label, and a
+# shared label would taint the general pool too.
+[[ $(printf '%s\n' "${GENERAL_NODE_TYPE}" "${SCYLLA_NODE_TYPE}" "${APPLICATION_NODE_TYPE}" | sort -u | wc -l) -eq 3 ]] \
+  || die "GENERAL_NODE_TYPE, SCYLLA_NODE_TYPE and APPLICATION_NODE_TYPE must be distinct"
 [[ ${SCYLLA_NODE_COUNT} -eq 3 ]] \
   || die "SCYLLA_NODE_COUNT must be exactly 3 for the fixed three-rack deployment"
 [[ ${SCYLLA_NODE_SHAPE} == *DenseIO* ]] \
@@ -1033,16 +1189,29 @@ fi
 RESUME_EXISTING=false
 case "${1:-}" in
   "")
+    resolve_compartment create
     create_oke
     ;;
   -r|--resume)
     RESUME_EXISTING=true
+    resolve_compartment create
     create_oke
     ;;
   -d|-x)
+    resolve_compartment lookup
+    if [[ -z ${OCI_COMPARTMENT_OCID} ]]; then
+      printf "Compartment %s does not exist; nothing to delete\n" "${OCI_COMPARTMENT_NAME}"
+      delete_context
+      exit 0
+    fi
     delete_oke
     ;;
   -p|--preflight)
+    resolve_compartment lookup
+    if [[ -z ${OCI_COMPARTMENT_OCID} ]]; then
+      printf "Compartment %s does not exist yet; a create run will create it\n" "${OCI_COMPARTMENT_NAME}"
+      exit 0
+    fi
     preflight_create
     printf "OKE create preflight passed for %s; no OCI resources were changed\n" "${OKE_CLUSTER_NAME}"
     ;;

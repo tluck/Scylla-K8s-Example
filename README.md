@@ -31,7 +31,7 @@ These flows assume node tuning (for example kubelet CPU manager policy) is appli
 
 ## Oracle Kubernetes Engine (OKE)
 
-The OKE flow follows the ScyllaDB Operator OKE reference architecture and uses the OCI CLI rather than introducing another infrastructure toolchain. It creates a VCN, public control-plane and load-balancer subnets, a private worker/pod subnet, an OKE Enhanced Cluster with VCN-native pod networking, and separate system, Dense I/O ScyllaDB, and optional application node pools.
+The OKE flow follows the ScyllaDB Operator OKE reference architecture and uses the OCI CLI rather than introducing another infrastructure toolchain. It creates a VCN, public control-plane and load-balancer subnets, a private worker/pod subnet, an OKE Enhanced Cluster with VCN-native pod networking, and three node pools like the GKE and EKS flows: a three-node system pool, a Dense I/O ScyllaDB pool, and an arm64 (Ampere) application pool. When `OCI_COMPARTMENT_OCID` is not set, it finds or creates a compartment named after the cluster.
 
 ```bash
 cp makeK8s_OKE/oke.conf.example makeK8s_OKE/oke.conf

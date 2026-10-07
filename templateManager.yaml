@@ -112,7 +112,7 @@ spec:
         - --config-file=/mnt/etc/scylla-manager/scylla-manager.yaml
         resources:
           requests: { cpu: 100m, memory: 200Mi }
-          limits:   { cpu: 100m, memory: 200Mi }
+          limits:   { cpu: MANAGERCPULIMIT, memory: MANAGERMEMORYLIMIT }
         readinessProbe:
           httpGet:
             path: /api/v1/clusters
