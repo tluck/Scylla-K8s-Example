@@ -30,8 +30,15 @@ mountPath=${1:-${mountPath}}
 
 if [[ $delete == 1 ]]; then
     clusterName=$(terraform output -raw eks_cluster_name)
-    [[ ${clusterName} != *"No output"* ]] && delete-k8s-config.bash $( kubectl config get-clusters|grep $(terraform output -raw eks_cluster_name) )
     terraform destroy -auto-approve
+    # update-kubeconfig names the context, cluster, and user after the cluster ARN
+    if [[ -n ${clusterName} && ${clusterName} != *"No output"* ]]; then
+        for kctx in $( kubectl config get-clusters | grep -E "cluster/${clusterName}$" ); do
+            kubectl config delete-context ${kctx}
+            kubectl config delete-cluster ${kctx}
+            kubectl config delete-user    ${kctx}
+        done
+    fi
     exit
 else
 

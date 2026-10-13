@@ -36,7 +36,7 @@ sysctls:
 # Scylla Manager Backups task definition
 #BAK backups: #[]
 #BAK   - name: daily
-#BAK     location: [s3:S3BUCKETNAME]
+#BAK     location: [BACKUPLOCATION]
 #BAK     cron: "0 1 * * *" # Every day at 01:00
 #BAK     retention: 14     # Keep 14 days of backups
 #GCS backups: #[]

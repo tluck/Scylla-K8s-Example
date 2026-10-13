@@ -91,5 +91,10 @@ else
 gcloud container node-pools delete  "application-pool" --cluster ${clusterName} --${gkeLocation}="${!gkeLocation}" --quiet
 gcloud container node-pools delete  "dedicated-pool"   --cluster ${clusterName} --${gkeLocation}="${!gkeLocation}" --quiet
 gcloud container clusters    delete ${clusterName} --${gkeLocation}="${!gkeLocation}" --quiet
+# get-credentials names the context, cluster, and user the same
+kctx="gke_${PROJECT_ID}_${!gkeLocation}_${clusterName}"
+kubectl config delete-context ${kctx}
+kubectl config delete-cluster ${kctx}
+kubectl config delete-user    ${kctx}
 
 fi

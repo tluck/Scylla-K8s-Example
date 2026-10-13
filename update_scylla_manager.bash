@@ -4,6 +4,8 @@
 
 if [[ -s gcs-service-account.json && ${cloudProvider} == "gke" ]]; then
   location="gcs:${gcsBucketName}"
+elif [[ ${cloudProvider} == "aks" && ${seaweedfsEnabled} != true ]]; then
+  location="azure:${azBlobContainer}"
 else
   location="s3:${s3BucketName}"
 fi
@@ -11,7 +13,9 @@ fi
 [[ $1 == '-n' ]] && native=true || native=false
 
 items=$(kubectl -n ${clusterNamespace} get ScyllaDBManagerClusterRegistration -o name 2>/dev/null)
-[[ -n "${items}" ]] && kubectl -n ${clusterNamespace} delete ${items}
+# --wait=false: the operator re-creates the registration under the same name at
+# once, and waiting for the deletion can hang; the status loop below is the wait
+[[ -n "${items}" ]] && kubectl -n ${clusterNamespace} delete --wait=false ${items}
 
 # check status
 upcount=0

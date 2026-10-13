@@ -10,6 +10,7 @@ spec:
       RAID0:
         devices:
           #AWS modelRegex: Amazon EC2 NVMe Instance Storage
+          #AKS modelRegex: Microsoft NVMe Direct Disk
           nameRegex: ^/dev/nvme\d+n\d+$
     filesystems:
     - device: /dev/md/nvmes

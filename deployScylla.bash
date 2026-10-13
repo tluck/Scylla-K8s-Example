@@ -116,6 +116,7 @@ agentSecretBefore=""; agentSecretAfter=""
 # create a secret to define the backup location
 bak="#BAK "
 gcs="#GCS "
+azure="#"
 # set developerMode to true for docker-desktop (not actually using XFS)
 [[ ${cloudProvider} == "docker" ]] && cloud="#CLOUD " || cloud=""
 if [[ ${cloudProvider} == "docker" || ${developerMode} == true ]]; then
@@ -157,6 +158,9 @@ case "${cloudProvider}" in
   gke)
     zoneA="${gcpRegion}-a"; zoneB="${gcpRegion}-b"; zoneC="${gcpRegion}-c"
     ;;
+  aks)
+    zoneA="${azRegion}-1"; zoneB="${azRegion}-2"; zoneC="${azRegion}-3"
+    ;;
   oke)
     topologyKey="oci.oraclecloud.com/fault-domain"
     zoneA="FAULT-DOMAIN-1"; zoneB="FAULT-DOMAIN-2"; zoneC="FAULT-DOMAIN-3"
@@ -187,12 +191,28 @@ else
   useS3=""
   gcs="#"
 fi
+backupLocation="s3:${s3BucketName}"
+# AKS and backup to Azure Blob - the account key is read at deploy time and
+# lives only in the agent config secret
+if [[ ${backupEnabled} == true && ${cloudProvider} == "aks" && ${seaweedfsEnabled} != true ]]; then
+  azStorageKey=$( az storage account keys list -n ${azStorageAccount} --query '[0].value' -o tsv 2>/dev/null )
+  if [[ -z ${azStorageKey} ]]; then
+    printf "* * * Error: cannot read the key for storage account %s\n" "${azStorageAccount}" >&2
+    printf "* * *        run makeK8s_AKS/createStorageAccount.bash (and az login) first\n" >&2
+    exit 1
+  fi
+  azure=""
+  useS3="#"
+  awss3="#"
+  seaweedfs="#"
+  backupLocation="azure:${azBlobContainer}"
+fi
 
 # not used with IAM
 #eval $(cat ~/.aws/credentials|grep access|sed -e 's/ //g' -e 's/aws_access_key_id/export AWS_ACCESS_KEY_ID/' -e 's/aws_secret_access_key/export AWS_SECRET_ACCESS_KEY/')
 
 if [[ ${backupEnabled} == true ]]; then
-  if [[ ${useS3} == '' || ${seaweedfs} == '' ]]; then
+  if [[ ${useS3} == '' || ${seaweedfs} == '' || ${azure} == '' ]]; then
     bak=""
   else
     bak="#"
@@ -224,6 +244,9 @@ if [[ ${backupEnabled} == true ]]; then
     ${awss3}region: ${awsRegion}
   ${gcs}gcs:
   ${gcs}  service_account_file: /etc/scylla-manager-agent/gcs-service-account.json
+  ${azure}azure:
+  ${azure}  account: ${azStorageAccount}
+  ${azure}  key: ${azStorageKey}
   " | base64 | tr -d '\n')
 EOF
   agentSecretAfter=$( secret_hash ${clusterNamespace} ${clusterName}-agent-config-secret )
@@ -494,6 +517,7 @@ if ! cat ${templateFile} | sed \
     -e "s|CPULIMIT|${dbCpuLimit}|g" \
     -e "s|MEMORYLIMIT|${dbMemoryLimit}|g" \
     -e "s|S3BUCKETNAME|${s3BucketName}|g" \
+    -e "s|BACKUPLOCATION|${backupLocation}|g" \
     -e "s|GCSBUCKETNAME|${gcsBucketName}|g" \
     -e "s|#BAK |${bak}|g" \
     -e "s|#GCS |${gcs}|g" \
@@ -620,6 +644,7 @@ fi
 case "${cloudProvider}" in
   eks) defaultStorageClass="gp2" ;;
   oke) defaultStorageClass="oci-bv" ;;
+  aks) defaultStorageClass="managed-csi" ;;
   *)   defaultStorageClass="standard" ;;
 esac
 prometheusStorage=""

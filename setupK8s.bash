@@ -214,8 +214,11 @@ if [[ ${cloudProvider} == "oke" ]]; then
   fi
 else
   [[ ${cloudProvider} == "eks" ]] && eks="" || eks="#AWS "
+  # AKS v4 L-series boot from an NVMe OS disk (MSFT NVMe Accelerator) - select local disks by model
+  [[ ${cloudProvider} == "aks" ]] && aks="" || aks="#AKS "
   if ! cat local-csi-driver/nodeconfigTemplate.yaml | sed \
     -e "s|#AWS |${eks}|g" \
+    -e "s|#AKS |${aks}|g" \
     > local-csi-driver/nodeconfig.yaml; then
     printf "* * * Error: could not render the cloud NodeConfig\n" >&2
     exit 1

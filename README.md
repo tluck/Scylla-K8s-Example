@@ -15,11 +15,12 @@ Install these tools in addition to this repository:
 - `kubectl` — for applying manifests and managing resources.
 - `jq` — for JSON processing (used during teardown and patches).
 - OCI CLI — required only for provisioning Oracle Kubernetes Engine (OKE).
+- Azure CLI (`az`) — required for provisioning Azure Kubernetes Service (AKS) and for AKS backups to Azure Blob Storage.
 - Network access to pull Helm charts and container images (for example from Docker Hub and chart repositories).
 
 ### TL;DR
 
-1. Provision Kubernetes: GKE with `./makeK8s_GKE/makeBasicCluster.bash`, EKS with `./makeK8s_EKS/makeBasicClusterTerraform.bash`, or OKE with `./makeK8s_OKE/makeBasicCluster.bash`.
+1. Provision Kubernetes: GKE with `./makeK8s_GKE/makeBasicCluster.bash`, EKS with `./makeK8s_EKS/makeBasicClusterTerraform.bash`, AKS with `./makeK8s_AKS/makeBasicCluster.bash`, or OKE with `./makeK8s_OKE/makeBasicCluster.bash`.
 2. Run `./setupK8s.bash` — installs cert-manager, monitoring stack operator dependencies, Scylla Operator, local storage, and optional SeaweedFS (in-cluster S3 for backups).
 3. Edit `init.conf` as needed, then run `./deployScylla.bash` — deploys the Scylla cluster, ScyllaDB Monitoring, Scylla Manager, and optional port-forwards.
 
@@ -47,6 +48,33 @@ For configuration, security defaults, and teardown instructions, see [`makeK8s_O
 
 ---
 
+## Azure Kubernetes Service (AKS)
+
+The AKS flow follows the GKE pattern: `makeK8s_AKS/aks.conf` holds the VM sizes and node counts, and `makeBasicCluster.bash` reads the region (`azRegion`), `singleZone`, and `nodeSelector0/1/2` from `init.conf`. It uses the Azure CLI to create the resource group `<clusterName>-rg` and an AKS cluster (Azure CNI Overlay, Free tier, automatic upgrades off) with three node pools:
+
+| Pool | Default VM size | Nodes | Zones |
+| --- | --- | --- | --- |
+| `system` | `Standard_D4s_v5` | 3 | 1, 2, 3 |
+| `scylla` | `Standard_L8as_v4` (4 local NVMe disks) | 3 | 1, 2, 3 |
+| `app` | `Standard_D8ps_v6` (arm64) | 1 | 1 |
+
+```bash
+az login
+./makeK8s_AKS/makeBasicCluster.bash
+./setupK8s.bash
+./deployScylla.bash
+```
+
+Every pool gets `makeK8s_AKS/kubeletconfig.json` (`cpuManagerPolicy: static`). AKS accepts a kubelet config only when a pool is created, so a pool built without it has to be recreated. Without static CPU management, NodeConfig tuning fails with `can't find Scylla container cpuset` and the Scylla pods never finish ignition.
+
+The kube context is named `aks_<region>_<clusterName>`, and `init.conf` maps any context containing `aks` to `cloudProvider=aks`. `setupK8s.bash` selects the local disks by NVMe model (`Microsoft NVMe Direct Disk`) because the v4 L-series VMs boot from an NVMe OS disk (`MSFT NVMe Accelerator`) that a device-name match would also pick up. `deployScylla.bash` places one rack in each of the zones `<azRegion>-1/2/3` and uses `managed-csi` for monitoring and Manager PVCs.
+
+Backups go to Azure Blob Storage (`azure:<azBlobContainer>`). `makeBasicCluster.bash` runs `createStorageAccount.bash` to create the storage account and container named in `init.conf`. `deployScylla.bash` reads the account key at deploy time and writes it into the agent config secret. The storage account is in the cluster's resource group, so `makeBasicCluster.bash -d` deletes the backups with the cluster.
+
+See [`makeK8s_AKS/README.md`](makeK8s_AKS/README.md) for details.
+
+---
+
 ## Configuration: `init.conf`
 
 `setupK8s.bash` and `deployScylla.bash` both source `init.conf` when it exists. It defines:
@@ -55,7 +83,7 @@ For configuration, security defaults, and teardown instructions, see [`makeK8s_O
 - **Features:** `backupEnabled`, `seaweedfsEnabled`, `enableAlternator`, `enableAuth`, `enableTLS`, `mTLS`, `customCerts`, `encryptionAtRest`, `writeIsolation`.
   - **`encryptionAtRest`** (Enterprise) — encrypts system data and all user tables at rest using a **locally-generated key** (`LocalFileSystemKeyProviderFactory`), no cloud KMS. On the first deploy `deployScylla.bash` generates `encryption_keys/system_key`, stores it as the `${clusterName}-encryption-key` secret, and mounts it into every Scylla pod at `/etc/scylla/encryption_keys/`; later deploys reuse the same key (from the local file, or recovered from the existing secret). Requires `enableAuth=true` and `helmEnabled=false` (it rides the custom `scylla.yaml` ConfigMap path). **Back up `encryption_keys/system_key` — losing it makes the encrypted data unrecoverable.**
 - **Versions:** `operatorTag`, `dbVersion`, `managerVersion`, `agentVersion`, `prometheusVersion`.
-- **Platform and topology:** `cloudProvider` (normally inferred from the current context), `clusterName`, `dataCenterName`, `clusterNamespace`, `externalSeeds` (multi-DC), node selectors, `members` (nodes per rack), capacities, and limits — adjusted per `kubectl` context (`docker-desktop`, `gke`, `eks`, `oke`, etc.).
+- **Platform and topology:** `cloudProvider` (normally inferred from the current context), `clusterName`, `dataCenterName`, `clusterNamespace`, `externalSeeds` (multi-DC), node selectors, `members` (nodes per rack), capacities, and limits — adjusted per `kubectl` context (`docker-desktop`, `gke`, `eks`, `aks`, `oke`, etc.).
 
 ---
 
@@ -76,7 +104,7 @@ Run from the `k8s` directory (same directory as `init.conf`).
 7. **ScyllaOperatorConfig** — Applies a `ScyllaOperatorConfig` named `cluster` setting `scyllaUtilsImage` to `docker.io/scylladb/scylla:${dbVersion}` (aligned with your DB image tag).
 8. **Local storage for Scylla**
   - **Docker / local:** Creates `StorageClass` `scylladb-local-xfs` using `rancher.io/local-path`.
-  - **Cloud (non-Docker):** Renders `local-csi-driver/nodeconfig.yaml` from `nodeconfigTemplate.yaml` (EKS vs non-EKS), or uses `nodeconfigOKE.yaml` on OKE; applies NodeConfig, applies the local CSI driver manifest set under `local-csi-driver/`, and waits for the driver DaemonSet.
+  - **Cloud (non-Docker):** Renders `local-csi-driver/nodeconfig.yaml` from `nodeconfigTemplate.yaml` (EKS and AKS select local NVMe disks by model; others by device name), or uses `nodeconfigOKE.yaml` on OKE; applies NodeConfig, applies the local CSI driver manifest set under `local-csi-driver/`, and waits for the driver DaemonSet.
 9. **SeaweedFS** — If `seaweedfsEnabled=true` (forced on for Docker Desktop and OKE when `backupEnabled=true`), runs `./deploySeaweedfs.bash`. It deploys a single-pod `weed mini` S3 server (Deployment + PVC + Service in namespace `seaweedfs`) at `http://seaweedfs-s3.seaweedfs:8333`, with the `scylla-backups` bucket and the `seaweedfsAccessKey` / `seaweedfsSecretKey` credentials from `init.conf`. SeaweedFS replaced MinIO, which deleted its community images from Docker Hub in September 2026. `-d` keeps the PVC and its backups; `-x` deletes the namespace.
 
 ### Teardown flags
@@ -110,7 +138,7 @@ Run from the `k8s` directory after `setupK8s.bash` has created the `scylladb-loc
 
 1. **Preflight** — Verifies a storage class containing `xfs` exists (expects prior `setupK8s.bash`).
 2. **Namespace** — Ensures `clusterNamespace` exists.
-3. **Backup agent secret** — If `backupEnabled`, creates `${clusterName}-agent-config-secret` with S3, SeaweedFS, or GCS settings depending on platform and `seaweedfsEnabled` / `gcs-service-account.json`. OKE defaults to SeaweedFS because OCI Object Storage is not a documented ScyllaDB Manager S3 provider.
+3. **Backup agent secret** — If `backupEnabled`, creates `${clusterName}-agent-config-secret` with S3, SeaweedFS, GCS, or Azure Blob settings depending on platform and `seaweedfsEnabled` / `gcs-service-account.json`. On AKS, the storage account key is read with `az storage account keys list`. OKE defaults to SeaweedFS because OCI Object Storage is not a documented ScyllaDB Manager S3 provider.
 4. **TLS** — Optional custom server issuers/certificates (`customCerts`), client ClusterIssuer and certificates for `mTLS` or custom client TLS.
 5. **Scylla configuration** — When `enableAuth` is true and `helmEnabled` is false, applies a ConfigMap `${clusterName}-config` with `scylla.yaml` (auth, TLS, Alternator, optional object storage endpoints, etc.).
 6. **ScyllaCluster** — Renders `templateClusterHelm.yaml` or `templateCluster.yaml` to a namespaced YAML and applies via Helm or `kubectl`. Supports multi-DC via `externalSeeds` when not `dc1`.
@@ -147,10 +175,13 @@ Example manager commands (adjust cluster name and namespace to match `init.conf`
 sctool cluster update --username ${authSuperuserName} --password ${authSuperuserPassword} -c region1/scylla
 sctool backup -c region1/scylla -L s3:scylla-backups-uswest2
 sctool backup -c region1/scylla -L gcs:scylla-backups-gke
+sctool backup -c region1/scylla -L azure:scylla-backups
 sctool backup --name="hourly_backup" --cluster="region1/scylla" --location='s3:scylla-backups-uswest2' --cron="@hourly" --retention=24
 ```
 
 For GKE backups to GCS, provide `gcs-service-account.json` and configure buckets as in `init.conf`.
+
+For AKS backups to Azure Blob Storage, run `makeK8s_AKS/createStorageAccount.bash` (`makeBasicCluster.bash` runs it for you) and set `azStorageAccount` / `azBlobContainer` in `init.conf`. The agents use account/key access. Role-based access requires `Microsoft.Authorization/roleAssignments/write`, which the Contributor role does not include.
 
 For OKE, backups use the in-cluster SeaweedFS endpoint by default. OCI Object Storage exposes an S3 Compatibility API, but OCI is not in ScyllaDB Manager's documented provider list; this example deliberately does not configure it as though it were natively supported. SeaweedFS is not on that list either. It is used here because it is a self-contained test target, and backups to it are verified end to end on Docker Desktop.
 
@@ -193,7 +224,7 @@ Use `kubectl exec` into the application pod as needed. For TLS material from the
 
 - **`setupK8s.bash -d`** or **`-x`** — Removes operators, monitoring stack install, cert-manager, local CSI driver namespace pieces, and optionally CRDs/namespaces (see table above).
 - **`deployScylla.bash -d`** or **`-x`** — Removes Scylla cluster, manager, monitoring, and certs; **`-x`** also clears PVCs/PVs and deletes cluster/manager namespaces.
-- **Cluster provisioning scripts** — `makeBasicCluster.bash` (GKE/EKS) often support **`-d`** to tear down the whole Kubernetes cluster.
+- **Cluster provisioning scripts** — `makeBasicCluster.bash` (GKE/AKS/OKE) and `makeBasicClusterTerraform.bash` (EKS) support **`-d`** to tear down the whole Kubernetes cluster. The GKE, EKS, and AKS scripts also remove the cluster's kubeconfig context, cluster, and user entries.
 
 ---
 

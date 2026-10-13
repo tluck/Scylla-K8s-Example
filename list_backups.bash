@@ -4,6 +4,8 @@
 
 if [[ -s gcs-service-account.json && ${cloudProvider} == "gke" ]]; then
   location="gcs:${gcsBucketName}"
+elif [[ ${cloudProvider} == "aks" && ${seaweedfsEnabled} != true ]]; then
+  location="azure:${azBlobContainer}"
 else
   location="s3:${s3BucketName}"
 fi
