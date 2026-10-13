@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# run from this directory - init.conf, aks.conf, and kubeletconfig.json are relative
+cd "$(dirname "$0")" || exit 1
+
 context=$(kubectl config current-context 2>/dev/null)
 [[ ${context} == *docker-desktop* ]] && kubectl config unset current-context
 [[ -e init.conf ]] && source init.conf

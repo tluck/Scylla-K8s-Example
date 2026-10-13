@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# run from this directory - init.conf, systemconfig.yaml, and ubuntu-fix.bash are relative
+cd "$(dirname "$0")" || exit 1
+
 [[ -e init.conf ]] && source init.conf
 
 verb=create

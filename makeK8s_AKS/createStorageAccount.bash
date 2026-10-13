@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# run from this directory - init.conf and aks.conf are relative
+cd "$(dirname "$0")" || exit 1
+
 source init.conf
 source aks.conf
 

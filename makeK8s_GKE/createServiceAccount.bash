@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# run from this directory - init.conf, the key file, and its ../ symlink are relative
+cd "$(dirname "$0")" || exit 1
+
 source init.conf
 
 # -s not -e: a failed `keys create` leaves a zero-byte file behind, and testing for

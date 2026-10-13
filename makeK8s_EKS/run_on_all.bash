@@ -1,5 +1,8 @@
 #!/usr/bin/env bash 
 
+# run from this directory - init.conf and the terraform state are relative
+cd "$(dirname "$0")" || exit 1
+
 allNgs=false
 
 if [[ $1 == "-a" ]]; then

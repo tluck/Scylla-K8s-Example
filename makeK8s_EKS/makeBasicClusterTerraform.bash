@@ -1,5 +1,8 @@
 #!/usr/bin/env bash 
 
+# run from this directory - init.conf, tf.conf, and the terraform state are relative
+cd "$(dirname "$0")" || exit 1
+
 currentContext=$(kubectl config current-context)
 kubectl config unset current-context
 [[ -e init.conf ]] && source init.conf

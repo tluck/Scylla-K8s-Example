@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# run from this directory - init.conf, gke.conf, systemconfig.yaml, and ubuntu-fix.bash are relative
+cd "$(dirname "$0")" || exit 1
+
 context=$(kubectl config current-context 2>/dev/null)
 [[ ${context} == *docker-desktop* ]] && kubectl config unset current-context
 [[ -e init.conf ]] && source init.conf
@@ -83,7 +86,7 @@ if [[ ${imageType} == 'UBUNTU_CONTAINERD' ]]; then
 fi
 
 # create the GCS SA
-createServiceAccount.bash
+./createServiceAccount.bash
 
 else
 
