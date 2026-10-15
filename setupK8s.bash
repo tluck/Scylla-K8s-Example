@@ -127,21 +127,17 @@ fi
 printf "\n%s\n" '------------------------------------------------------------------------------------------------------------------------'
 if [[ ${helmEnabled} == true ]]; then
 printf "Installing the scylla-operator v${operatorTag} via Helm\n"
-status=$(helm status scylla-operator --namespace scylla-operator 2>&1) || true  # exits 1 when release absent — handled below
-if [[ ${status} == *"not found"* ]]; then
-printf "Installing the scylla-operator v${operatorTag} via Helm\n"
-# Install Scylla Operator
 cat templateOperator.yaml | sed \
   -e "s|REPOSITORY|${operatorRepository}|g" \
   -e "s|IMAGETAG|${operatorTag}|g" \
   -e "s|NODESELECTOR|${nodeSelector0}|g" \
   > scylla-operator.yaml
 [[ ${operatorTag} == "latest" ]] && repo=scylla-latest || repo=scylla
-helm install scylla-operator ${repo}/scylla-operator --create-namespace --namespace scylla-operator -f scylla-operator.yaml --version ${operatorTag}
+# upgrade --install: a re-run applies templateOperator.yaml changes to an existing release (no-op when unchanged)
+helm upgrade --install scylla-operator ${repo}/scylla-operator --create-namespace --namespace scylla-operator -f scylla-operator.yaml --version ${operatorTag}
 if [ $? -ne 0 ]; then
   printf "%s\n" "* * * Error - Launching Scylla Operator"
   exit 1
-fi
 fi
 else
   #operatorTag=$(curl -s https://api.github.com/repos/scylladb/scylla-operator/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/v//g')
@@ -151,11 +147,23 @@ else
   url="https://raw.githubusercontent.com/scylladb/scylla-operator/v${operatorTag}/deploy/operator.yaml"
 fi
 printf "Installing the scylla-operator v${operatorTag} via kubectl\n"
-kubectl -n=scylla-operator apply --server-side --force-conflicts -f=${url}
-if [ $? -ne 0 ]; then
+# upstream pins a floating minor tag (e.g. 1.22) - use the exact ${operatorRepository}/scylla-operator:${operatorTag}
+# image the Helm path runs, for the containers and the SCYLLA_OPERATOR_IMAGE env var alike
+if ! manifest=$(curl -fsSL "${url}"); then
+  printf "%s\n" "* * * Error - Downloading ${url}"
+  exit 1
+fi
+sed -E "s#docker\.io/scylladb/scylla-operator:[^\"[:space:]]+#${operatorRepository}/scylla-operator:${operatorTag}#g" <<< "${manifest}" \
+  | kubectl -n=scylla-operator apply --server-side --force-conflicts -f=-
+if [ ${PIPESTATUS[1]} -ne 0 ]; then
   printf "%s\n" "* * * Error - Launching Scylla Operator"
   exit 1
 fi
+# upstream operator.yaml has no nodeSelector - pin to the nodeSelector0 pool as templateOperator.yaml does on the Helm path
+for d in scylla-operator webhook-server; do
+  kubectl -n scylla-operator patch deployment ${d} --type=strategic \
+    -p "{\"spec\":{\"template\":{\"spec\":{\"nodeSelector\":{\"scylla.scylladb.com/node-type\":\"${nodeSelector0}\"}}}}}"
+done
 fi
 
 # wait
@@ -166,11 +174,7 @@ kubectl -n scylla-operator rollout status --timeout=90s deployment/scylla-operat
 
 sleep 5
 # update the scylla-operator config
-if [[ ${operatorTag} == "latest" || ${operatorTag} =~ ^1\.2[0-9]\.[0-9] ]]; then
-  utilsImage=${dbVersion}
-else
-  utilsImage="2025.1.9"
-fi
+utilsImage=${dbVersion}
 [[ ${cloudProvider} == "eks" ]] && utilsImage="2025.1.9" # because of the EKS image bug
 
 # the 2025.2.x and 2025.3.x images have a bug that prevents the scylla-operator from working properly

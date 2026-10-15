@@ -1,50 +1,36 @@
-# Allows to override Scylla name showing up in recommended k8s labels
-nameOverride: "" #"NAMESPACE"
-# Allows to override names used in Scylla k8s objects.
-fullnameOverride: ""
-# Allows to customize Scylla image
+# Helm values for the scylla/scylla chart. Kept in sync with templateCluster.yaml so that
+# helmEnabled=true and helmEnabled=false render the same ScyllaCluster spec - edit both together.
+# The chart passes racks, exposeOptions and externalSeeds through to the CR verbatim.
+nameOverride: ""
+# CR name = clusterName (otherwise the chart derives it from the release name)
+fullnameOverride: CLUSTERNAME
 scyllaImage:
-  repository: scylladb/scylla-enterprise # scylladb/scylla
-  tag: DBVERSION # 2025.1.2 # Overrides the image tag whose default is the chart appVersion.
+  repository: docker.io/scylladb/scylla
+  tag: DBVERSION # 2026.2.1
 agentImage:
-  repository: scylladb/scylla-manager-agent
-  tag: AGENTVERSION # 3.5.0
+  repository: docker.io/scylladb/scylla-manager-agent
+  tag: AGENTVERSION # 3.11.1
 serviceAccount:
-  # Specifies whether a service account should be created
   create: true
-  # Annotations to add to the service account
   annotations: {}
-alternator:
-  # Allows to enable Alternator (DynamoDB compatible API) frontend
-  enabled: false
-  # Enables insecure HTTP port to be backwards compatible. This should be set to "false" in the overrides.
-  insecureEnableHTTP: true
-  writeIsolation: always
-# If set to a non-empty string, it forces a rolling restart of Scylla. Change it again to trigger a new restart.
-forceRedeploymentReason: ""
-# Whether developer mode should be enabled.
-developerMode: DEVMODE 
-# cpuset determines if the cluster will use cpu-pinning for max performance.
-cpuset: false
-# Whether to enable host networking in Scylla Pod
-hostNetworking: false
-# Whether Scylla Operator should perform automatic cleanup of orphaned Pods
-automaticOrphanedNodeCleanup: false
-# Sysctl properties to be applied during initializaxtion given as a list of key=value pairs
-sysctls: 
-  - fs.aio-max-nr=30000000
-# Scylla Manager Backups task definition
-#BAK backups: #[]
+#ALT alternator:
+#ALT   enabled: true
+#ALT   port: 8000
+#ALT   writeIsolation: WRITEISOLATION
+#ALT   insecureEnableHTTP: null # drop the chart default so the spec matches templateCluster.yaml
+developerMode: DEVMODE
+automaticOrphanedNodeCleanup: true
+scyllaArgs: "--smp=CPULIMIT" # "--poll-mode"
+#BAK backups:
 #BAK   - name: daily
 #BAK     location: [BACKUPLOCATION]
 #BAK     cron: "0 1 * * *" # Every day at 01:00
 #BAK     retention: 14     # Keep 14 days of backups
-#GCS backups: #[]
+#GCS backups:
 #GCS   - name: daily
 #GCS     location: [gcs:GCSBUCKETNAME]
 #GCS     cron: "0 1 * * *" # Every day at 01:00
 #GCS     retention: 14     # Keep 14 days of backups
-# Scylla Manager Repair task definition - kept in sync with templateCluster.yaml
 repairs:
   - name: weekly
     cron: "0 0 * * 0" # Every Sunday at midnight
@@ -52,26 +38,33 @@ repairs:
     keyspace: ["*"]  # All keyspaces
     # intensity: 0
     # parallel:  0 # Running parallel tasks – regular and tablet repair tasks can only run in parallel when regular task uses  --parallel 0  (otherwise the second task fails to start and gets rescheduled)
-# scyllaArgs will be appended to Scylla binary startup parameters.
-scyllaArgs: ""
-# ImagePullSecrets used for pulling Scylla and Agent images
+# hostNetworking is deprecated; node-IP exposure is covered by exposeOptions below.
+exposeOptions:
+  broadcastOptions:
+    clients:
+      type: BROADCASTCLIENTSTYPE
+    nodes:
+      type: BROADCASTNODESTYPE
+  nodeService:
+    type: NODESERVICETYPE
+#DEV sysctls: # deprecated
+#DEV   - fs.aio-max-nr=30000000
+#DEV   - fs.nr_open=1073741816
+#DEV   - fs.file-max=9223372036854775807
+#MDC externalSeeds:
+#MDC   - EXTERNAL-SEED-1
+#MDC   - EXTERNAL-SEED-2
+#MDC   - EXTERNAL-SEED-3
 imagePullSecrets: []
-# Name of datacenter
 datacenter: DATACENTER
-# List of racks - 3 racks match RF
-racks:
+racks: # ideally 3 racks are used to match RF
   - name: rack1
-    # Name of additional scylla config configMap
-    scyllaConfig: scylla-config
-    # Name of additional scylla manager agent config stored as secret
-    scyllaAgentConfig: scylla-agent-config-secret
-    # Number of rack members (nodes)
     members: MEMBERS
-    # Storage definition
+    scyllaConfig: CLUSTERNAME-config                  # scylla.yaml ConfigMap written by deployScylla.bash
+    scyllaAgentConfig: CLUSTERNAME-agent-config-secret # agent config Secret written by deployScylla.bash
     storage:
+      capacity: CAPACITY
       storageClassName: scylladb-local-xfs
-      capacity: CAPACITY 
-    # Scylla container resource definition
     resources:
       requests: { cpu: CPULIMIT, memory: MEMORYLIMIT }
       limits:   { cpu: CPULIMIT, memory: MEMORYLIMIT }
@@ -106,34 +99,44 @@ racks:
           key: scylla-operator.scylladb.com/dedicated
           operator: Equal
           value: scyllaclusters
-    volumes:
-      # - name: tls-certificates
-      #   secret:
-      #     secretName: scylla-server-certs # Reference the secret containing certificates.
-      - name: scylladb-serving-ca
-        configMap:
-          name: scylla-local-serving-ca
-          defaultMode: 420
+    #CTorG volumes:
+    #CUSTC   - name: CLUSTERNAME-server-certs
+    #CUSTC     secret:
+    #CUSTC       secretName: CLUSTERNAME-server-certs
+    #CUSTC       defaultMode: 420
+    #CERTS   - name: scylladb-serving-ca
+    #CERTS     configMap:
+    #CERTS       name: CLUSTERNAME-local-serving-ca
+    #CERTS       defaultMode: 420
+    #EAR   - name: CLUSTERNAME-encryption-key
+    #EAR     secret:
+    #EAR       secretName: CLUSTERNAME-encryption-key
+    #EAR       defaultMode: 420
     #GCS   - name: gcs-service-account
     #GCS     secret:
     #GCS       secretName: gcs-service-account
+    #CTorG volumeMounts:
+    #CUSTC   - name: CLUSTERNAME-server-certs
+    #CUSTC     readOnly: true
+    #CUSTC     mountPath: /var/run/secrets/scylla-server-certs/
+    #CERTS   - name: scylladb-serving-ca
+    #CERTS     readOnly: true
+    #CERTS     mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+    #EAR   - name: CLUSTERNAME-encryption-key
+    #EAR     readOnly: true
+    #EAR     mountPath: /etc/scylla/encryption_keys
     #GCS agentVolumeMounts:
     #GCS   - name: gcs-service-account
     #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
     #GCS     subPath: gcs-service-account.json
     #GCS     readOnly: true
   - name: rack2
-    # Name of additional scylla config configMap
-    scyllaConfig: scylla-config
-    # Name of additional scylla manager agent config stored as secret
-    scyllaAgentConfig: scylla-agent-config-secret
-    # Number of rack members (nodes)
     members: MEMBERS
-    # Storage definition
+    scyllaConfig: CLUSTERNAME-config                  # scylla.yaml ConfigMap written by deployScylla.bash
+    scyllaAgentConfig: CLUSTERNAME-agent-config-secret # agent config Secret written by deployScylla.bash
     storage:
+      capacity: CAPACITY
       storageClassName: scylladb-local-xfs
-      capacity: CAPACITY 
-    # Scylla container resource definition
     resources:
       requests: { cpu: CPULIMIT, memory: MEMORYLIMIT }
       limits:   { cpu: CPULIMIT, memory: MEMORYLIMIT }
@@ -168,34 +171,44 @@ racks:
           key: scylla-operator.scylladb.com/dedicated
           operator: Equal
           value: scyllaclusters
-    volumes:
-      # - name: tls-certificates
-      #   secret:
-      #     secretName: scylla-server-certs # Reference the secret containing certificates.
-      - name: scylladb-serving-ca
-        configMap:
-          name: scylla-local-serving-ca
-          defaultMode: 420
+    #CTorG volumes:
+    #CUSTC   - name: CLUSTERNAME-server-certs
+    #CUSTC     secret:
+    #CUSTC       secretName: CLUSTERNAME-server-certs
+    #CUSTC       defaultMode: 420
+    #CERTS   - name: scylladb-serving-ca
+    #CERTS     configMap:
+    #CERTS       name: CLUSTERNAME-local-serving-ca
+    #CERTS       defaultMode: 420
+    #EAR   - name: CLUSTERNAME-encryption-key
+    #EAR     secret:
+    #EAR       secretName: CLUSTERNAME-encryption-key
+    #EAR       defaultMode: 420
     #GCS   - name: gcs-service-account
     #GCS     secret:
     #GCS       secretName: gcs-service-account
+    #CTorG volumeMounts:
+    #CUSTC   - name: CLUSTERNAME-server-certs
+    #CUSTC     readOnly: true
+    #CUSTC     mountPath: /var/run/secrets/scylla-server-certs/
+    #CERTS   - name: scylladb-serving-ca
+    #CERTS     readOnly: true
+    #CERTS     mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+    #EAR   - name: CLUSTERNAME-encryption-key
+    #EAR     readOnly: true
+    #EAR     mountPath: /etc/scylla/encryption_keys
     #GCS agentVolumeMounts:
     #GCS   - name: gcs-service-account
     #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
     #GCS     subPath: gcs-service-account.json
     #GCS     readOnly: true
   - name: rack3
-    # Name of additional scylla config configMap
-    scyllaConfig: scylla-config
-    # Name of additional scylla manager agent config stored as secret
-    scyllaAgentConfig: scylla-agent-config-secret
-    # Number of rack members (nodes)
     members: MEMBERS
-    # Storage definition
+    scyllaConfig: CLUSTERNAME-config                  # scylla.yaml ConfigMap written by deployScylla.bash
+    scyllaAgentConfig: CLUSTERNAME-agent-config-secret # agent config Secret written by deployScylla.bash
     storage:
+      capacity: CAPACITY
       storageClassName: scylladb-local-xfs
-      capacity: CAPACITY 
-    # Scylla container resource definition
     resources:
       requests: { cpu: CPULIMIT, memory: MEMORYLIMIT }
       limits:   { cpu: CPULIMIT, memory: MEMORYLIMIT }
@@ -230,23 +243,38 @@ racks:
           key: scylla-operator.scylladb.com/dedicated
           operator: Equal
           value: scyllaclusters
-    volumes:
-      # - name: tls-certificates
-      #   secret:
-      #     secretName: scylla-server-certs # Reference the secret containing certificates.
-      - name: scylladb-serving-ca
-        configMap:
-          name: scylla-local-serving-ca
-          defaultMode: 420
+    #CTorG volumes:
+    #CUSTC   - name: CLUSTERNAME-server-certs
+    #CUSTC     secret:
+    #CUSTC       secretName: CLUSTERNAME-server-certs
+    #CUSTC       defaultMode: 420
+    #CERTS   - name: scylladb-serving-ca
+    #CERTS     configMap:
+    #CERTS       name: CLUSTERNAME-local-serving-ca
+    #CERTS       defaultMode: 420
+    #EAR   - name: CLUSTERNAME-encryption-key
+    #EAR     secret:
+    #EAR       secretName: CLUSTERNAME-encryption-key
+    #EAR       defaultMode: 420
     #GCS   - name: gcs-service-account
     #GCS     secret:
     #GCS       secretName: gcs-service-account
+    #CTorG volumeMounts:
+    #CUSTC   - name: CLUSTERNAME-server-certs
+    #CUSTC     readOnly: true
+    #CUSTC     mountPath: /var/run/secrets/scylla-server-certs/
+    #CERTS   - name: scylladb-serving-ca
+    #CERTS     readOnly: true
+    #CERTS     mountPath: /var/run/configmaps/scylla-operator.scylladb.com/scylladb/serving-ca
+    #EAR   - name: CLUSTERNAME-encryption-key
+    #EAR     readOnly: true
+    #EAR     mountPath: /etc/scylla/encryption_keys
     #GCS agentVolumeMounts:
     #GCS   - name: gcs-service-account
     #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
     #GCS     subPath: gcs-service-account.json
     #GCS     readOnly: true
-# Whether to create Prometheus ServiceMonitor
+# Monitoring comes from the ScyllaDBMonitoring CR (templateDBMonitoring.yaml), as on the kubectl path
 serviceMonitor:
-  create: true
+  create: false
   labels: {}

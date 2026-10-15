@@ -112,11 +112,11 @@ Nested `.git` directories may appear under some `sample_app/` subtrees — vendo
 
 - **Two TLS / auth flags are tightly coupled.** `enableTLS` requires `enableAuth`; `mTLS` swaps user/password auth for client certs; `customCerts` replaces operator-managed certs (needed for two DCs in one k8s cluster with TLS). See `TLS Certs - Use Cases.md` for what each operator-issued secret is for.
 
-- **`templateCluster.yaml` vs `templateClusterHelm.yaml`** — kept in sync manually, render to the same final manifest shape via different paths. Touch both when adjusting cluster topology.
+- **kubectl vs Helm templates are kept in sync manually** — `templateCluster.yaml` ↔ `templateClusterHelm.yaml` and `templateManager.yaml` ↔ `templateManagerHelm.yaml` must render the same ScyllaCluster / Manager specs (verified identical on 2026-10-15). Touch both of a pair, and check with `helm template ... --show-only templates/scyllacluster.yaml` against the kubectl render. The Manager chart cannot add volumes, so `deployScylla.bash` patches the mTLS client-cert mount onto the Helm-installed Deployment. `templateOperator.yaml` must not set memory limits — a 60Mi limit OOMKilled the operator and silently stalled monitoring and Manager.
 
 - **The `scylla-latest` symlink** at the repo root points to `/opt/Source/scylla/scylla-operator/helm/` — a developer-machine path. Only used when `operatorTag=latest`; will hard-fail for anyone else.
 
-- **`dbVersion` is pinned in two places.** `init.conf` sets it; `setupK8s.bash:138-143` has a hardcoded fallback for the `ScyllaOperatorConfig.scyllaUtilsImage` when `operatorTag` is outside the 1.2x range, documented as a workaround for the 2025.2 / 2025.3 image bug. Update both together.
+- **`dbVersion` also sets the operator's utils image.** `setupK8s.bash:169-174` sets `ScyllaOperatorConfig.scyllaUtilsImage` to `dbVersion`, except on EKS, where it is hardcoded to `2025.1.9` to work around the 2025.2 / 2025.3 image bug. Revisit that pin when changing `dbVersion` on EKS.
 
 - **`gcs-service-account.json` must be non-empty, and every guard tests `-s`, not `-e`.** A failed `gcloud iam service-accounts keys create` leaves a zero-byte file; with `-e` that file selected the GCS path, mounted empty credentials, and produced a misleading `403: Provided scope(s) are not authorized` when Manager validated the backup location — while also making `createServiceAccount.bash` exit early forever, so it could never repair itself. Use `-s` for any new test of this file.
 
@@ -128,7 +128,6 @@ Nested `.git` directories may appear under some `sample_app/` subtrees — vendo
 
 - **AKS v4 L-series boot from an NVMe OS disk.** `/dev/nvme0n1` is the OS disk (`MSFT NVMe Accelerator v1.0`), so a `nameRegex` match alone would RAID it. The `#AKS ` toggle in `nodeconfigTemplate.yaml` adds `modelRegex: Microsoft NVMe Direct Disk`, which selects only the local disks, the same way the `#AWS ` toggle does on EKS.
 
-- **The pre-1.19 monitoring template** (`templateDBMonitoring.pre-1.19.yaml`) exists because the CR schema changed in operator 1.19. Don't delete it without verifying the minimum supported operator version.
 
 - **The step symlinks (`_step_1`, `_step_2`) may not exist in every checkout.** Call the underlying scripts by name when in doubt.
 

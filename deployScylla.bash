@@ -348,10 +348,10 @@ kubectl -n ${clusterNamespace} delete configmap ${clusterName}-config > /dev/nul
 [[ ${gcs} == "" ]] && CTorG=""|| CTorG="#CTorG "
 # Encryption at Rest (local key, no cloud KMS). Generate the key once, reuse it thereafter, and mount it into
 # every Scylla pod via the ${clusterName}-encryption-key secret. Uses the custom configMap path, so it needs
-# enableAuth=true and helmEnabled=false (same coupling as enableTLS).
+# enableAuth=true (same coupling as enableTLS).
 ear="#EAR "
 if [[ ${encryptionAtRest} == true ]]; then
-  if [[ ${enableAuth} == true && ${helmEnabled} == false ]]; then
+  if [[ ${enableAuth} == true ]]; then
     ear=""
     CTorG=""   # ensure the racks' volumes:/volumeMounts: parents render for the key mount
     earKeyFile="encryption_keys/system_key"
@@ -375,12 +375,12 @@ if [[ ${encryptionAtRest} == true ]]; then
     kubectl -n ${clusterNamespace} delete secret ${clusterName}-encryption-key > /dev/null 2>&1 || true
     kubectl -n ${clusterNamespace} create secret generic ${clusterName}-encryption-key --from-file=system_key=${earKeyFile}
   else
-    printf "WARNING: encryptionAtRest=true requires enableAuth=true and helmEnabled=false - skipping encryption at rest\n"
+    printf "WARNING: encryptionAtRest=true requires enableAuth=true - skipping encryption at rest\n"
   fi
 fi
 certs="#CERTS "
-# generate the configMap only if auth is enabled and not using Helm
-if [[ ${enableAuth} == true && ${helmEnabled} == false ]]; then
+# generate the configMap only if auth is enabled (both kubectl and Helm paths mount it via scyllaConfig)
+if [[ ${enableAuth} == true ]]; then
   printf "Creating a configMap to define the basic Scylla config properties\n"
   if [[ ${enableTLS} == true ]]; then
     certs=""
@@ -800,6 +800,16 @@ ${prometheusStorage}
         port: web
 EOF
 
+# the operator creates the Grafana ConfigMaps and Deployment asynchronously after the
+# ScyllaDBMonitoring apply - wait for them, or every patch below hits NotFound
+printf "Waiting for the operator to create the Grafana objects\n"
+for ((i = 0; i < 60; i++)); do
+  kubectl -n ${clusterNamespace} get configmap/${clusterName}-grafana-configs configmap/${clusterName}-grafana-provisioning \
+    deployment/${clusterName}-grafana > /dev/null 2>&1 && break
+  sleep 5
+done
+(( i < 60 )) || printf "* * * Grafana objects did not appear within 300s - is the scylla-operator running?\n" >&2
+
 # Patch to set the default dashboard to scylla-overview.master.json and set the scrape interval
 printf "Patching the Grafana config to set the default dashboard to scylla-overview.master.json\n"
 kubectl -n ${clusterNamespace} get configmap ${clusterName}-grafana-configs -o yaml \
@@ -937,6 +947,26 @@ if [[ ${helmEnabled} == true ]]; then
     printf "* * * Error: Helm could not apply Scylla Manager\n" >&2
     exit 1
   fi
+  # the chart has no hook for extra volumes - mount the mTLS client certs as templateManager.yaml does
+  # (strategic merge keys on name, so re-running is idempotent)
+  if [[ ${mTLS} == true ]]; then
+    kubectl -n ${scyllaManagerNamespace} patch deployment scylla-manager --type=strategic -p "
+spec:
+  template:
+    spec:
+      containers:
+      - name: scylla-manager
+        volumeMounts:
+        - name: ${clusterName}-client-certs
+          readOnly: true
+          mountPath: /var/run/secrets/scylla-client-certs/
+      volumes:
+      - name: ${clusterName}-client-certs
+        secret:
+          secretName: ${clusterName}-client-certs
+          defaultMode: 420
+"
+  fi
 else
   if ! kubectl -n ${scyllaManagerNamespace} apply --server-side -f ${yaml}; then
     printf "* * * Error: kubectl could not apply Scylla Manager\n" >&2
@@ -1013,7 +1043,7 @@ metadata:
   namespace: scylla-manager
 subjects:
 - kind: ServiceAccount
-  name: scylla-manager-cluster-member
+  name: scylla-manager-member
   namespace: scylla-manager
 roleRef:
   kind: Role

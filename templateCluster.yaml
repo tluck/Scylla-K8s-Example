@@ -56,6 +56,8 @@ spec:
     racks: # ideally 3 racks are used to match RF
       - name: rack1
         members: MEMBERS
+        scyllaConfig: CLUSTERNAME-config                  # scylla.yaml ConfigMap written by deployScylla.bash
+        scyllaAgentConfig: CLUSTERNAME-agent-config-secret # agent config Secret written by deployScylla.bash
         storage:
           capacity: CAPACITY
           storageClassName: scylladb-local-xfs
@@ -124,9 +126,10 @@ spec:
         #GCS     mountPath: /etc/scylla-manager-agent/gcs-service-account.json
         #GCS     subPath: gcs-service-account.json
         #GCS     readOnly: true
-        #GCS     readOnly: true
       - name: rack2
         members: MEMBERS
+        scyllaConfig: CLUSTERNAME-config                  # scylla.yaml ConfigMap written by deployScylla.bash
+        scyllaAgentConfig: CLUSTERNAME-agent-config-secret # agent config Secret written by deployScylla.bash
         storage:
           capacity: CAPACITY
           storageClassName: scylladb-local-xfs
@@ -197,6 +200,8 @@ spec:
         #GCS     readOnly: true
       - name: rack3
         members: MEMBERS
+        scyllaConfig: CLUSTERNAME-config                  # scylla.yaml ConfigMap written by deployScylla.bash
+        scyllaAgentConfig: CLUSTERNAME-agent-config-secret # agent config Secret written by deployScylla.bash
         storage:
           capacity: CAPACITY
           storageClassName: scylladb-local-xfs

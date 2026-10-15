@@ -47,10 +47,9 @@ sleep 5
 # fix for xfs
 # kubectl apply -f ubuntu-xfs-installer.yaml
 if [[ ${imageType} == 'UBUNTU_CONTAINERD' ]]; then
-  # run the ubuntu-fix.bash script
-  # this will install xfsprogs on all nodes
-  # and remove the ubuntu-xfs-installer DaemonSet
+  # ubuntu-fix.bash installs xfsprogs on the ScyllaDB nodes via the ubuntu-xfs-installer DaemonSet.
+  # The DaemonSet is deliberately left running (each pod ends in sleep infinity) so replacement
+  # or added ScyllaDB nodes get xfsprogs too. It is a privileged hostPID pod on every ScyllaDB node.
   #kubectl apply -f ubuntu-xfs-installer.yaml
-  ./ubuntu-fix.bash
   ./ubuntu-fix.bash
 fi

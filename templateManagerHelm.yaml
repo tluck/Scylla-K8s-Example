@@ -1,74 +1,46 @@
-# Allows to override Scylla Manager name showing up in recommended k8s labels
+# Helm values for the scylla/scylla-manager chart. Kept in sync with templateManager.yaml so that
+# helmEnabled=true and helmEnabled=false produce the same Manager - edit both together.
+# The chart has no hook for extra volumes on the Manager Deployment, so the mTLS client-cert
+# mount (#CUSTC in templateManager.yaml) is patched in by deployScylla.bash after helm install.
 nameOverride: ""
-# Allows to override names used in Scylla Manager k8s objects.
 fullnameOverride: ""
-# Allows to customize Scylla Manager image
 image:
-  repository: scylladb
+  repository: docker.io/scylladb
   pullPolicy: IfNotPresent
-  tag: MANAGERVERSION # 3.5.0 # 3.4.0@sha256:6424c36929b39ef4e679ee7d61578b1070e28c186b23b278147fde8e391d9db1
-# Allows to customize Scylla Manager Controller image
-controllerImage:
-  repository: scylladb
-  pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: MANAGERVERSION # 3.5.0
 # Scylla Manager log level, allowed values are: error, warn, info, debug, trace
 logLevel: info
-# Resources allocated to Scylla Manager pods
 resources:
-  requests: { cpu:             10m, memory: 20Mi }
+  requests: { cpu: 100m, memory: 200Mi }
   limits:   { cpu: MANAGERCPULIMIT, memory: MANAGERMEMORYLIMIT }
-# Resources allocated to Scylla Manager pods
-controllerResources:
-  requests: { cpu:             10m, memory: 20Mi }
-  limits:   { cpu: MANAGERCPULIMIT, memory: MANAGERMEMORYLIMIT }
-# Node selector for Scylla Manager pod
 nodeSelector: {}
-# Tolerations for Scylla Manager pod
 tolerations: []
-# Affinity for Scylla Manager pod
 affinity: {}
-## SecurityContext holds pod-level security attributes
 securityContext: {}
-# Node selector for Scylla Manager Controller pod
-controllerNodeSelector: {}
-# Tolerations for Scylla Manager Controller pod
-controllerTolerations: []
-# Affinity for Scylla Manager Controller pod
-controllerAffinity: {}
-## ControllerSecurityContext holds pod-level security attributes
-controllerSecurityContext: {}
 serviceAccount:
-  # Specifies whether a service account should be created
   create: true
-  # Annotations to add to the service account
   annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
   name: ""
-controllerServiceAccount:
-  # Specifies whether a service account should be created
-  create: true
-  # Annotations to add to the service account
-  annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
-  name: ""
+# Manager's backing ScyllaCluster (subchart). The chart keeps its default annotation
+# scylla-operator.scylladb.com/disable-global-scylladb-manager-integration: "true".
 scylla:
-  developerMode: true
+  developerMode: DEVMODE
   scyllaImage:
-    repository: scylladb/scylla-enterprise # scylladb/scylla
-    tag: DBVERSION # latest # 6.2.0 # Overrides the image tag whose default is the chart appVersion.
+    repository: docker.io/scylladb/scylla
+    tag: DBVERSION
   agentImage:
-    tag: AGENTVERSION # latest # 3.4.0@sha256:441403aed8880cad1feef68aa7a8ee9ffd99a458dc1dcff3dc54ce5bf3cb07b7
-  datacenter: manager-DATACENTER
+    repository: docker.io/scylladb/scylla-manager-agent
+    tag: AGENTVERSION
+  #DEV sysctls:
+  #DEV   - fs.aio-max-nr=30000000
+  # pods are scylla-manager-DATACENTER-rack1-N, same as templateManager.yaml
+  datacenter: DATACENTER
   racks:
     - name: rack1
       members: MANAGERMEMBERS # 1 or 3
       storage:
-        capacity: MANAGERDBCAPACITY # 1Gi 
-        storageClassName: "STORAGECLASS" # use default storage class"
+        capacity: MANAGERDBCAPACITY
+        storageClassName: "STORAGECLASS"
       resources:
         requests: { cpu: MANAGERDBCPULIMIT, memory: MANAGERDBMEMORYLIMIT }
         limits:   { cpu: MANAGERDBCPULIMIT, memory: MANAGERDBMEMORYLIMIT }
@@ -89,6 +61,6 @@ scylla:
             key: scylla-operator.scylladb.com/dedicated
             operator: Equal
             value: scyllaclusters
-# Whether to create Prometheus ServiceMonitor
+# deployScylla.bash creates the scylla-manager ServiceMonitor itself (a chart-owned one conflicts with it)
 serviceMonitor:
-  create: true
+  create: false

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash 
 
-#kubectl apply -f ubuntu-xfs-installer.yaml
+# Installs xfsprogs on the ScyllaDB nodes (GKE Ubuntu images lack it; local-csi-driver needs mkfs.xfs).
+# The DaemonSet stays running on purpose: each pod installs, then sleeps, so any replacement or newly
+# added ScyllaDB node gets xfsprogs as soon as it joins. Delete it only if the node image ships xfsprogs:
+#   kubectl -n kube-system delete daemonset ubuntu-xfs-installer
 kubectl apply -f=- <<EOF
 apiVersion: apps/v1
 kind: DaemonSet
@@ -51,7 +54,7 @@ spec:
           value: scyllaclusters
 EOF
 
-# Wait for all pods to be Running or Succeeded
+# Wait until no pod is Pending/Failed - Running means the install ran and the pod is sleeping
 while true; do
   sleep 60
   echo "Waiting for DaemonSet pods to run to completion ..."
@@ -64,4 +67,3 @@ while true; do
   fi
 done
 
-#kubectl -n kube-system delete daemonset ubuntu-xfs-installer

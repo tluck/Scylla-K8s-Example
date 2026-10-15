@@ -1,7 +1,7 @@
 # Operator replicas use leader election. Setting to 1 will disable pdb creation
 # and won't be HA; creations or updates of Scylla CRs will fail during operator
 # upgrades or disruptions
-replicas: 1
+replicas: 2 # matches upstream deploy/operator.yaml (kubectl path)
 
 # Allows to customize Scylla Operator image
 image:
@@ -13,9 +13,9 @@ image:
 # Scylla Operator log level, 0-9 (higher number means more detailed logs)
 logLevel: 2
 # Resources allocated to Scylla Operator pods
+# Requests only, like upstream deploy/operator.yaml - a 60Mi limit OOMKilled the operator
 resources:
   requests: { cpu: 100m, memory: 20Mi }
-  limits:   { cpu: 200m, memory: 60Mi }
 # Node selector for Scylla Operator pods
 nodeSelector: #{ }
   scylla.scylladb.com/node-type: NODESELECTOR
@@ -56,12 +56,11 @@ securityContext: {}
 
 # Replicas for Webhook Server. Setting to 1 will disable pdb creation and
 # won't be HA; it won't react during operator upgrades or disruptions.
-webhookServerReplicas: 1
+webhookServerReplicas: 2 # matches upstream deploy/operator.yaml
 
 # Resources allocated to Webhook Server pods
 webhookServerResources:
   requests: { cpu: 10m, memory: 20Mi }
-  limits:   { cpu: 20m, memory: 60Mi }
 
 # Node selector for Webhook Server pods
 webhookServerNodeSelector: #{ }

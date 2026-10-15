@@ -17,15 +17,7 @@ data:
     database:
       hosts:
       - scylla-manager-DATACENTER-rack1-0
-      # ssl: true
-    ssl:
-      cert_file: /var/run/configmaps/scylla-manager/client-certs/ca.crt
-      user_cert_file: /var/run/secrets/scylla-manager/client-certs/tls.crt
-      user_key_file: /var/run/secrets/scylla-manager/client-certs/tls.key
-      # cert_file: /var/run/configmaps/scylla-manager/client-ca/ca-bundle.crt
-      # user_cert_file: /var/run/secrets/scylla-manager/user-admin/tls.crt
-      # user_key_file: /var/run/secrets/scylla-manager/user-admin/tls.key
-  
+
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -44,6 +36,9 @@ spec:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: scylla-manager
+    - namespaceSelector: # the operator also talks to the Manager database pods (same as the Helm chart)
+        matchLabels:
+          kubernetes.io/metadata.name: scylla-operator
 
 ---
 apiVersion: v1
@@ -139,6 +134,9 @@ kind: ScyllaCluster
 metadata:
   name: scylla-manager
   namespace: NAMESPACE
+  annotations:
+    # Manager's own database is not registered with Manager (same as the Helm chart)
+    scylla-operator.scylladb.com/disable-global-scylladb-manager-integration: "true"
 spec:
   version: DBVERSION
   agentVersion: AGENTVERSION
