@@ -120,12 +120,17 @@ spec:
             path: /healthz
             port: s3
           periodSeconds: 5
+          timeoutSeconds: 5
+        # /healthz answers slowly while the pod is busy with S3 uploads or a restore;
+        # the default 1s timeout restarted it mid-transfer
         livenessProbe:
           httpGet:
             path: /healthz
             port: s3
           initialDelaySeconds: 30
           periodSeconds: 20
+          timeoutSeconds: 10
+          failureThreshold: 6
         resources:
           requests:
             cpu: 100m
