@@ -13,7 +13,7 @@ from multiprocessing import get_context, cpu_count
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra import ConsistencyLevel
 from cassandra.query import SimpleStatement, ordered_dict_factory, TraceUnavailable
-from scylla_conn import add_connection_args, build_cluster_and_session, resolve_connection
+from scylla_connection_library import add_connection_args, build_cluster_and_session, resolve_connection
 
 # Constants
 COMPRESSION = "'sstable_compression': 'ZstdWithDictsCompressor'"

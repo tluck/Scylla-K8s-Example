@@ -13,9 +13,20 @@ fi
 [[ $1 == '-n' ]] && native=true || native=false
 
 items=$(kubectl -n ${clusterNamespace} get ScyllaDBManagerClusterRegistration -o name 2>/dev/null)
-# --wait=false: the operator re-creates the registration under the same name at
-# once, and waiting for the deletion can hang; the status loop below is the wait
-[[ -n "${items}" ]] && kubectl -n ${clusterNamespace} delete --wait=false ${items}
+# Re-register only when Manager cannot reach the cluster. Deleting a working registration removes the
+# cluster from Manager, the operator re-registers it under a new cluster ID, and its tasks are created
+# again - on a re-run that ends in Degraded tasks with "task name <name> is already used".
+if [[ -n "${items}" ]]; then
+  if kubectl -n ${scyllaManagerNamespace} exec -i service/scylla-manager -c scylla-manager -- \
+      sctool status -c ${clusterNamespace}/${clusterName} > /dev/null 2>&1; then
+    printf "Cluster ${clusterNamespace}/${clusterName} is registered with Scylla Manager - keeping its registration\n"
+  else
+    printf "Scylla Manager cannot reach ${clusterNamespace}/${clusterName} - re-creating its registration\n"
+    # --wait=false: the operator re-creates the registration under the same name at
+    # once, and waiting for the deletion can hang; the status loop below is the wait
+    kubectl -n ${clusterNamespace} delete --wait=false ${items}
+  fi
+fi
 
 # check status
 upcount=0

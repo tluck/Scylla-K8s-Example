@@ -3,7 +3,7 @@
 
 Used by loader.py, query.py, slow_loader.py and tombstone.py so they all accept the
 same connection flags and build sessions the same way. Scripts are copied flat into
-/app by Dockerfile.python and copy_to_myapp.bash, so a plain `import scylla_conn`
+/app by Dockerfile.python and copy_to_myapp.bash, so a plain `import scylla_connection_library`
 resolves both in the repo and inside the app pod.
 
 Two modes:

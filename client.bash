@@ -2,7 +2,13 @@
 
 set -euo pipefail
 
-script_dir=$(dirname "$0")
+# Follow symlinks (e.g. ~/bin/client.bash) so init.conf is found next to the real script
+script_path="$0"
+while [[ -L "${script_path}" ]]; do
+    link=$(readlink "${script_path}")
+    [[ "${link}" == /* ]] && script_path="${link}" || script_path="$(dirname "${script_path}")/${link}"
+done
+script_dir=$(dirname "${script_path}")
 [[ -e "${script_dir}/init.conf" ]] && source "${script_dir}/init.conf"
 
 # Allow overriding from environment, with defaults

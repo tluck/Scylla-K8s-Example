@@ -17,6 +17,9 @@ spec:
       mode: External
 # [/prometheusMode]
     grafana:
+      # grafanaAnonymous in init.conf - anonymous users get the Viewer role
+      authentication:
+        insecureEnableAnonymousAccess: GRAFANAANONYMOUS
 # [grafanaDatasources]
       datasources:
         - name: prometheus

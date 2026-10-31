@@ -9,7 +9,7 @@ import argparse
 from asyncio import sleep
 from datetime import datetime, timedelta
 from cassandra import ConsistencyLevel
-from scylla_conn import add_connection_args, build_cluster_and_session, log_auth, resolve_connection
+from scylla_connection_library import add_connection_args, build_cluster_and_session, log_auth, resolve_connection
 
 parser = argparse.ArgumentParser(description='ScyllaDB table query script')
 add_connection_args(parser)

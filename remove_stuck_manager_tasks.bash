@@ -8,10 +8,10 @@
 #     and the operator has backed off. The underlying problem is fixed but the
 #     task can sit Degraded for the better part of an hour before it is retried.
 #
-#  2. Re-applying the ScyllaCluster gives the CR a new owner-uid, so it can no
-#     longer adopt the task it previously created in Manager and fails with
-#     "task name <name> is already used". The orphan has to be deleted from
-#     Manager before the operator can recreate it.
+#  2. The cluster was re-registered with Manager under a new cluster ID (its
+#     ScyllaDBManagerClusterRegistration was deleted) and the operator lost track
+#     of a task it re-created, failing with "task name <name> is already used".
+#     The orphan has to be deleted from Manager before the operator can recreate it.
 #
 # Both are resolved by nudging the CR; case 2 additionally deletes the orphan.
 
@@ -27,6 +27,7 @@ if [[ -z ${ns} ]]; then
 fi
 
 acted=false
+nudged=""
 tasks=$( kubectl -n "${ns}" get scylladbmanagertasks -o name 2>/dev/null )
 if [[ -z ${tasks} ]]; then
     echo "No ScyllaDBManagerTask resources in namespace ${ns}"
@@ -55,11 +56,13 @@ for task in ${tasks}; do
         fi
     fi
 
-    # nudge the CR so the operator reconciles now instead of after its backoff.
-    # Added and removed again so no annotation is left behind on the resource.
+    # nudge the CR so the operator reconciles now instead of after its backoff. The annotation is
+    # removed only after the task settles: removing it straight away changes the CR while the operator
+    # is saving the new task ID, the save fails with a conflict, and the next sync tries to create the
+    # task again - "task name <name> is already used" against the task it has just created.
     echo "    forcing a resync"
     kubectl -n "${ns}" annotate "${task}" resync-nudge="$(date +%s)" --overwrite > /dev/null
-    kubectl -n "${ns}" annotate "${task}" resync-nudge- > /dev/null
+    nudged+="${task} "
 done
 
 if [[ ${acted} == false ]]; then
@@ -78,6 +81,11 @@ for i in $(seq 1 12); do
     done
     [[ -z ${stuck} ]] && break
     sleep 10
+done
+
+# no annotation is left behind on the resources
+for task in ${nudged}; do
+    kubectl -n "${ns}" annotate "${task}" resync-nudge- > /dev/null 2>&1
 done
 
 kubectl -n "${ns}" get scylladbmanagertasks

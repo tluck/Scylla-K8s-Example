@@ -35,7 +35,7 @@
         <dependency>
             <groupId>com.scylladb</groupId>
             <artifactId>java-driver-core</artifactId>
-            <version>4.19.0.5</version>
+            <version>4.19.2.3</version>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

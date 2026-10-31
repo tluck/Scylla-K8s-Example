@@ -1,5 +1,11 @@
 #!/bin/bash
+set -e
 
-for f in *py; do
-kubectl cp $f scylla-dc1/python-application:/app
+source "$(dirname "$0")/init.conf"
+
+files=("${@:-*.py}")
+[ $# -eq 0 ] && files=(*.py)
+
+for f in "${files[@]}"; do
+  kubectl cp "$(realpath "$f")" "${clusterNamespace}/python-application:/app/$f"
 done

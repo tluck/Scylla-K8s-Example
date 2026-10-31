@@ -9,7 +9,7 @@ import argparse
 import random
 from cassandra import ConsistencyLevel
 from cassandra.concurrent import execute_concurrent_with_args
-from scylla_conn import add_connection_args, build_cluster_and_session, resolve_connection
+from scylla_connection_library import add_connection_args, build_cluster_and_session, resolve_connection
 
 ## Script args and Help
 parser = argparse.ArgumentParser(add_help=True)

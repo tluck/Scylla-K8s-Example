@@ -673,11 +673,12 @@ if ! sed \
     -e "s|STORAGECLASS|${defaultStorageClass}|g" \
     -e "s|MONITORCAPACITY|${monitoringCapacity}|g" \
     -e "s|NODESELECTOR|${nodeSelector0}|g" \
+    -e "s|GRAFANAANONYMOUS|${grafanaAnonymous:-false}|g" \
     templateDBMonitoring.yaml > ${yaml}; then
   printf "* * * Error: could not render %s\n" "${yaml}" >&2
   exit 1
 fi
-if grep -Eq 'CLUSTERNAME|NAMESPACE|STORAGECLASS|MONITORCAPACITY|NODESELECTOR' "${yaml}"; then
+if grep -Eq 'CLUSTERNAME|NAMESPACE|STORAGECLASS|MONITORCAPACITY|NODESELECTOR|GRAFANAANONYMOUS' "${yaml}"; then
   printf "* * * Error: unresolved monitoring template token in %s\n" "${yaml}" >&2
   exit 1
 fi
@@ -818,6 +819,16 @@ kubectl -n ${clusterNamespace} get configmap ${clusterName}-grafana-configs -o y
 kubectl -n ${clusterNamespace} get configmap ${clusterName}-grafana-configs -o yaml \
   | sed -e 's|default_home.*json|default_home_dashboard_path = /var/run/dashboards/scylladb/scylladb-master/scylla-overview.master.json|' \
   | kubectl -n ${clusterNamespace} apply -f -
+# Grafana 13 downloads 18 plugins (~0.5GB) on every start, core datasources included; the dashboards
+# only use prometheus, which is not bundled in the image. disable_plugins also drops a plugin from that
+# download list, so only prometheus is fetched (~55MB).
+grafanaUnusedPlugins="elasticsearch,grafana-advisor-app,grafana-exploretraces-app,grafana-lokiexplore-app,grafana-metricsdrilldown-app,grafana-postgresql-datasource,grafana-pyroscope-app,grafana-pyroscope-datasource,influxdb,jaeger,loki,mssql,mysql,opentsdb,stackdriver,tempo,zipkin"
+grafanaIni=$(kubectl -n ${clusterNamespace} get configmap ${clusterName}-grafana-configs -o jsonpath='{.data.grafana\.ini}')
+if [[ -n ${grafanaIni} && ${grafanaIni} != *"[plugins]"* ]]; then
+  printf "Patching the Grafana config to skip downloading the plugins the dashboards do not use\n"
+  kubectl -n ${clusterNamespace} patch configmap ${clusterName}-grafana-configs --type merge \
+    -p "$(jq -n --arg ini "${grafanaIni}"$'\n\n[plugins]\ndisable_plugins = '"${grafanaUnusedPlugins}" '{data: {"grafana.ini": $ini}}')"
+fi
 printf "Patching the Grafana config for the prometheus source setting the scrape interval to ${scrape_interval}\n"
 kubectl -n ${clusterNamespace} get configmap ${clusterName}-grafana-provisioning -o yaml \
   | sed -e "s|timeInterval:.*|timeInterval: \"$scrape_interval\"|" \
@@ -831,9 +842,24 @@ printf "Manager dashboard will use Prometheus datasource for metrics\n"
 
 printf "Patching the Grafana deployment to just use the most recent dashboards\n"
 # Recreate stops the old pod before starting the new one (never 2 Grafana pods), and
-# revisionHistoryLimit 0 lets Kubernetes garbage-collect the superseded ReplicaSet
+# revisionHistoryLimit 0 lets Kubernetes garbage-collect the superseded ReplicaSet.
+# The operator caps /var/lib/grafana at 100Mi. Grafana 13's plugin download filled it and got the pod
+# evicted about once a minute; disable_plugins above cuts it to ~55MB, and 1Gi leaves room for any
+# plugin a later Grafana adds to its default download list.
+grafanaStorageSizeLimit="1Gi"
+storageIndex=$(kubectl -n ${clusterNamespace} get deployment ${clusterName}-grafana -o json \
+  | jq '.spec.template.spec.volumes | map(.name) | index("grafana-storage")')
+storagePatch=""
+if [[ ${storageIndex} =~ ^[0-9]+$ ]]; then
+  # the test op makes the patch fail rather than resize the wrong volume if the operator reorders them
+  storagePatch="{\"op\": \"test\", \"path\": \"/spec/template/spec/volumes/${storageIndex}/name\", \"value\": \"grafana-storage\"},
+  {\"op\": \"replace\", \"path\": \"/spec/template/spec/volumes/${storageIndex}/emptyDir\", \"value\": {\"sizeLimit\": \"${grafanaStorageSizeLimit}\"}},"
+else
+  printf "* * * Warning: no grafana-storage volume in the Grafana deployment - leaving its size limit alone\n" >&2
+fi
 patchOut=$(kubectl -n ${clusterNamespace} patch deployment ${clusterName}-grafana --type='json' \
   -p="[
+  ${storagePatch}
   {
     \"op\": \"replace\",
     \"path\": \"/spec/template/spec/initContainers/0/volumeMounts\",

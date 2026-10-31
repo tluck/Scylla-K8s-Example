@@ -13,7 +13,7 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scylla.driver.version>4.19.2.2</scylla.driver.version>
+        <scylla.driver.version>4.19.2.3</scylla.driver.version>
         <picocli.version>4.7.7</picocli.version>
         <slf4j.version>2.0.20</slf4j.version>
         <logback.version>1.5.38</logback.version>
