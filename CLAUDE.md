@@ -81,6 +81,8 @@ All flows typically accept `-d` for teardown. After provisioning, the rest of th
 
 ## Sample apps (`sample_app/`)
 
+This folder is the source of truth; `Scylla-Examples/sample_app` is a copy refreshed by `Scylla-Examples/sync_sample_app.bash` (its pre-commit hook in `githooks/` blocks commits of a stale copy). Edit here, never in the copy.
+
 Workloads that exercise the deployed cluster. They have their **own** `sample_app/init.conf` (separate from the top-level one — with overlapping variable names; treat them as independent files) and helper scripts:
 
 - **`_deploy_python-apps_k8s.bash` / `_deploy_java-apps_k8s.bash`** — deploy app pods.

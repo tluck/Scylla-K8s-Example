@@ -70,18 +70,27 @@ class SingleEndpointTranslator(AddressTranslator):
 
 
 def add_connection_args(parser):
-    """Add the connection flags shared by every tool. Call before parse_args()."""
-    parser.add_argument('-s', '--hosts', default="127.0.0.1",
-                        help='Comma-separated ScyllaDB node Names or IPs (host or host:port)')
-    parser.add_argument('-u', '--username', default="cassandra", help='ScyllaDB username')
-    parser.add_argument('-p', '--password', default="cassandra", help='ScyllaDB password')
+    """Add the connection flags shared by every tool. Call before parse_args().
+
+    -s/-u/-p/--dc default to $CONTACT_POINTS/$USERNAME/$PASSWORD/$DC, the variables a
+    sourced cluster-<id>.env (Scylla-Examples sc_api/gen_cluster_env.bash) exports, so
+    `. cluster-<id>.env; ./loader.py` needs no connection flags. A flag still wins.
+    """
+    parser.add_argument('-s', '--hosts', default=os.environ.get('CONTACT_POINTS') or "127.0.0.1",
+                        help='Comma-separated ScyllaDB node Names or IPs (host or host:port). '
+                             'Defaults to $CONTACT_POINTS, else 127.0.0.1')
+    parser.add_argument('-u', '--username', default=os.environ.get('USERNAME') or "cassandra",
+                        help='ScyllaDB username. Defaults to $USERNAME, else cassandra')
+    parser.add_argument('-p', '--password', default=os.environ.get('PASSWORD') or "cassandra",
+                        help='ScyllaDB password. Defaults to $PASSWORD, else cassandra')
     parser.add_argument('-l', '--local_only', action="store_true",
                         help='Use local-only mode (single reachable endpoint, e.g. a port-forward)')
     parser.add_argument('-m', '--mtls', action="store_true",
                         help='Use mtls for authentication (overrides username/password)')
     parser.add_argument('-e', '--tls', action="store_true",
                         help='Use tls for connection with username/password')
-    parser.add_argument('--dc', default='dc1', help='Local datacenter name for ScyllaDB')
+    parser.add_argument('--dc', default=os.environ.get('DC') or 'dc1',
+                        help='Local datacenter name for ScyllaDB. Defaults to $DC, else dc1')
     parser.add_argument('-z', '--rack', default=os.environ.get('RACK') or None,
                         help='Local rack name, i.e. the AZ the client runs in (rack1/rack2/rack3, '
                              'as nodetool status reports it - not the cloud AZ name). Prefers '

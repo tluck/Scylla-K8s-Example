@@ -82,3 +82,4 @@ tls/
 # Miscellaneous
 node_modules/
 .env
+sample_app/**/env

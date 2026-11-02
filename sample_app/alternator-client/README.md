@@ -73,7 +73,7 @@ Use when you want the table definition to go through Alternator but bulk load th
 
 ## Related
 
-- **`loop_n_faker.bash`**: Optional wrapper that sources `env` if present, can init with `alternator-faker.py -d`, then runs multiple parallel `cql-faker.py` instances with disjoint user id ranges (default 1M rows each). Commented lines show `alternator-faker.py` / `cql-alternator-faker.py` variants.
+- **`loop_n_faker.bash`**: Optional wrapper that takes `CONTACT_POINTS`, `USERNAME`, `PASSWORD` and `DC` from the environment (e.g. `. cluster-<id>.env` from `sc_api/gen_cluster_env.bash` in [Scylla-Examples](https://github.com/tluck/Scylla-Examples); defaults `scylla-client`, `cassandra`, `dc1`), can init with `alternator-faker.py -d`, then runs multiple parallel `cql-faker.py` instances with disjoint user id ranges (default 1M rows each). Commented lines show `alternator-faker.py` / `cql-alternator-faker.py` variants.
 
 - **`.github/workflows/python-tests.yml`**: CI for this sample (if present in your checkout).
 

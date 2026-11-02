@@ -12,7 +12,7 @@
     <maven.compiler.target>21</maven.compiler.target>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <scylla.driver.version>4.19.2.3</scylla.driver.version>
+    <scylla.driver.version>4.19.4.0</scylla.driver.version>
   </properties>
 
   <dependencies>
@@ -26,12 +26,12 @@
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>dynamodb</artifactId>
-      <version>2.28.17</version>
+      <version>2.57.8</version>
     </dependency>
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>url-connection-client</artifactId>
-      <version>2.28.17</version>
+      <version>2.57.8</version>
     </dependency>
   </dependencies>
 

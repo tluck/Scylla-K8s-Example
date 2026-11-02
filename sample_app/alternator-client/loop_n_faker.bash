@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
-CONTACT_POINTS='scylla-client'
-USERNAME='cassandra'
-PASSWORD='cassandra'
-[[ -e env ]] && source env
+# connection settings come from the environment (e.g. . cluster-<id>.env from Scylla-Examples/sc_api/gen_cluster_env.bash)
+CONTACT_POINTS=${CONTACT_POINTS:-scylla-client}
+USERNAME=${USERNAME:-cassandra}
+PASSWORD=${PASSWORD:-cassandra}
+DC=${DC:-dc1}
 if [[ $1 == "-x" ]]; then
     init=1
     shift

@@ -31,7 +31,7 @@
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.target>21</maven.compiler.target>
-    <scylla.driver.version>4.19.0.5</scylla.driver.version>
+    <scylla.driver.version>4.19.4.0</scylla.driver.version>
     <maven.compiler.source>21</maven.compiler.source>
   </properties>
 </project>

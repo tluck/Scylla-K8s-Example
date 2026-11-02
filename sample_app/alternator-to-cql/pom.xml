@@ -19,7 +19,7 @@
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>bom</artifactId>
-                <version>2.42.2</version>
+                <version>2.57.8</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -30,12 +30,12 @@
         <dependency>
             <groupId>com.scylladb.alternator</groupId>
             <artifactId>load-balancing</artifactId>
-            <version>2.0.3</version>
+            <version>2.0.7</version>
         </dependency>
         <dependency>
             <groupId>com.scylladb</groupId>
             <artifactId>java-driver-core</artifactId>
-            <version>4.19.2.3</version>
+            <version>4.19.4.0</version>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
