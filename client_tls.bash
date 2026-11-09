@@ -35,8 +35,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-cql_user="${authSuperuserName:-cassandra}"
-cql_pass="${authSuperuserPassword:-cassandra}"
+cql_user="${authSuperuserName:-scylla}"
+cql_pass="${authSuperuserPassword:-scylla}"
 
 # kubectl binary (override in minimal images or CI). Unused when SCYLLADB_TLS_MOUNT is set.
 KUBECTL="${KUBECTL:-kubectl}"

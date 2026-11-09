@@ -32,7 +32,7 @@ def decode_alternator_blob(blob_bytes):
     return int.from_bytes(value_bytes, 'little')
 
 cluster = Cluster(['scylla-client'], port=9042, 
-                 auth_provider=PlainTextAuthProvider(username='cassandra', password='cassandra'))
+                 auth_provider=PlainTextAuthProvider(username='scylla', password='scylla'))
 session = cluster.connect('alternator_userid')
 
 # Create + verify

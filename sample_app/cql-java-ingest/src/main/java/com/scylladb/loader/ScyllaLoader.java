@@ -55,8 +55,8 @@ public class ScyllaLoader implements Runnable {
     @Option(names = {"-s", "--hosts"}, defaultValue = "127.0.0.1:9042") String hosts = "127.0.0.1:9042";
     @Option(names = {"-m", "--mtls"}, description = "Use mTLS for connections") boolean mtls;
     @Option(names = {"-e", "--tls"}, description = "Use TLS for connections") boolean tls;
-    @Option(names = {"-u", "--username"}, defaultValue = "cassandra") String username = "cassandra";
-    @Option(names = {"-p", "--password"}, defaultValue = "cassandra") String password = "cassandra";
+    @Option(names = {"-u", "--username"}, defaultValue = "scylla") String username = "scylla";
+    @Option(names = {"-p", "--password"}, defaultValue = "scylla") String password = "scylla";
     @Option(names = {"-k", "--keyspace"}, defaultValue = "mercado") String keyspace = "mercado";
     @Option(names = {"-t", "--table"}, defaultValue = "userid") String table = "userid";
     @Option(names = {"-d", "--drop"}, description = "Drop existing table before creating new one") boolean drop;

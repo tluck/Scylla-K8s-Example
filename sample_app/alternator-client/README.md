@@ -67,13 +67,13 @@ Use when you want the table definition to go through Alternator but bulk load th
 
 ### `encode_alternator.py`
 
-**Small encoding demo**: hardcoded cluster contact point `scylla-client:9042` / `cassandra` credentials, keyspace `alternator_userid`. Inserts a single row with `encode_alternator_blob` for sample `Name` / `Score`, then selects and prints decoded fields. Useful to verify blob layout end-to-end; for flexible hosts, use `decode_alternator.py` or copy the encode/decode helpers.
+**Small encoding demo**: hardcoded cluster contact point `scylla-client:9042` / `scylla` credentials, keyspace `alternator_userid`. Inserts a single row with `encode_alternator_blob` for sample `Name` / `Score`, then selects and prints decoded fields. Useful to verify blob layout end-to-end; for flexible hosts, use `decode_alternator.py` or copy the encode/decode helpers.
 
 ---
 
 ## Related
 
-- **`loop_n_faker.bash`**: Optional wrapper that takes `CONTACT_POINTS`, `USERNAME`, `PASSWORD` and `DC` from the environment (e.g. `. cluster-<id>.env` from `sc_api/gen_cluster_env.bash` in [Scylla-Examples](https://github.com/tluck/Scylla-Examples); defaults `scylla-client`, `cassandra`, `dc1`), can init with `alternator-faker.py -d`, then runs multiple parallel `cql-faker.py` instances with disjoint user id ranges (default 1M rows each). Commented lines show `alternator-faker.py` / `cql-alternator-faker.py` variants.
+- **`loop_n_faker.bash`**: Optional wrapper that takes `CONTACT_POINTS`, `USERNAME`, `PASSWORD` and `DC` from the environment (e.g. `. cluster-<id>.env` from `sc_api/gen_cluster_env.bash` in [Scylla-Examples](https://github.com/tluck/Scylla-Examples); defaults `scylla-client`, `scylla`, `dc1`), can init with `alternator-faker.py -d`, then runs multiple parallel `cql-faker.py` instances with disjoint user id ranges (default 1M rows each). Commented lines show `alternator-faker.py` / `cql-alternator-faker.py` variants.
 
 - **`.github/workflows/python-tests.yml`**: CI for this sample (if present in your checkout).
 

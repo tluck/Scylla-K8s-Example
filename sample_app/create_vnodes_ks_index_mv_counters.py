@@ -19,8 +19,8 @@ convert_to_tablets_kubectl.bash, it has to be copied into a tablets keyspace
 instead.
 Without -c, this keyspace migrates as is.
 
-Connects with username/password authentication (defaults: cassandra /
-cassandra), so the cluster needs `enableAuth=true` in init.conf.
+Connects with username/password authentication (defaults: scylla /
+scylla), so the cluster needs `enableAuth=true` in init.conf.
 
 Install driver:  pip install scylla-driver
                   (or: pip install cassandra-driver)
@@ -35,8 +35,8 @@ from cassandra.cluster import Cluster
 
 # in k8s use scylla-client
 CONTACT_POINTS = ["scylla-client"] # ["127.0.0.1"]
-USERNAME = "cassandra"
-PASSWORD = "cassandra"
+USERNAME = "scylla"
+PASSWORD = "scylla"
 KEYSPACE = "vnodes_ks"
 # one replica per rack - a tablets keyspace has to be RF-rack-valid
 REPLICATION_FACTOR = 3

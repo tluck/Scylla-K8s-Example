@@ -51,8 +51,8 @@ def main():
     dynamodb = boto3.resource('dynamodb',
         endpoint_url=url,
         region_name='None',
-        aws_access_key_id='cassandra',
-        aws_secret_access_key='cassandra',
+        aws_access_key_id='scylla',
+        aws_secret_access_key='scylla',
         verify=verify
     )
 

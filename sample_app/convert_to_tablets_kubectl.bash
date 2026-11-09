@@ -25,8 +25,8 @@ script_dir=$(dirname "$0")
 # init.conf is optional - fall back to the usual defaults if it was not found
 clusterName="${clusterName:-scylla}"
 clusterNamespace="${clusterNamespace:-scylla-dc1}"
-cql_user="${authSuperuserName:-cassandra}"
-cql_pass="${authSuperuserPassword:-cassandra}"
+cql_user="${authSuperuserName:-scylla}"
+cql_pass="${authSuperuserPassword:-scylla}"
 
 namespace="${clusterNamespace}"
 pod_timeout="${waitPeriod:-600s}"   # how long a pod may take to come back (resharding)

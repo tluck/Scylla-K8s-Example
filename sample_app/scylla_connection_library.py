@@ -79,10 +79,10 @@ def add_connection_args(parser):
     parser.add_argument('-s', '--hosts', default=os.environ.get('CONTACT_POINTS') or "127.0.0.1",
                         help='Comma-separated ScyllaDB node Names or IPs (host or host:port). '
                              'Defaults to $CONTACT_POINTS, else 127.0.0.1')
-    parser.add_argument('-u', '--username', default=os.environ.get('USERNAME') or "cassandra",
-                        help='ScyllaDB username. Defaults to $USERNAME, else cassandra')
-    parser.add_argument('-p', '--password', default=os.environ.get('PASSWORD') or "cassandra",
-                        help='ScyllaDB password. Defaults to $PASSWORD, else cassandra')
+    parser.add_argument('-u', '--username', default=os.environ.get('USERNAME') or "scylla",
+                        help='ScyllaDB username. Defaults to $USERNAME, else scylla')
+    parser.add_argument('-p', '--password', default=os.environ.get('PASSWORD') or "scylla",
+                        help='ScyllaDB password. Defaults to $PASSWORD, else scylla')
     parser.add_argument('-l', '--local_only', action="store_true",
                         help='Use local-only mode (single reachable endpoint, e.g. a port-forward)')
     parser.add_argument('-m', '--mtls', action="store_true",

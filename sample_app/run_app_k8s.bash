@@ -2,8 +2,8 @@
 
 dc=${DC:-dc1}
 cluster=${CLUSTER:-scylla}
-username=${USERNAME:-cassandra}
-password=${PASSWORD:-cassandra}
+username=${USERNAME:-scylla}
+password=${PASSWORD:-scylla}
 contact_points=${CONTACT_POINTS:-${cluster}-client.${cluster}-${dc}.svc}
 # AZ awareness: RACK is set on the pod by _deploy_python-apps_k8s.bash when appRack
 # is configured, and names the ScyllaDB rack this pod shares a zone with. Passed on

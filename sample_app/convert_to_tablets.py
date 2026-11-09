@@ -87,8 +87,8 @@ from cassandra.policies import DCAwareRoundRobinPolicy, TokenAwarePolicy
 # Defaults line up with run_app_k8s.bash, which passes -u/-p/-s/--dc from the
 # pod's environment.
 DEFAULT_HOSTS = os.environ.get("CONTACT_POINTS", "scylla-client")
-DEFAULT_USERNAME = os.environ.get("USERNAME", "cassandra")
-DEFAULT_PASSWORD = os.environ.get("PASSWORD", "cassandra")
+DEFAULT_USERNAME = os.environ.get("USERNAME", "scylla")
+DEFAULT_PASSWORD = os.environ.get("PASSWORD", "scylla")
 DEFAULT_DC = os.environ.get("DC", "dc1")
 
 # Where get_certs_k8s.bash leaves the operator-issued TLS material.

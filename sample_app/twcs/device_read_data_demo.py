@@ -453,10 +453,10 @@ def parse_args():
         help="Use TLS for connection with username/password"
     )
     parser.add_argument(
-        "-u", "--username", default="cassandra", help="ScyllaDB username"
+        "-u", "--username", default="scylla", help="ScyllaDB username"
     )
     parser.add_argument(
-        "-p", "--password", default="cassandra", help="ScyllaDB password"
+        "-p", "--password", default="scylla", help="ScyllaDB password"
     )
     parser.add_argument(
         "-k", "--keyspace", default=KEYSPACE, help=f"Keyspace name (default: {KEYSPACE})"

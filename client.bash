@@ -12,8 +12,8 @@ script_dir=$(dirname "${script_path}")
 [[ -e "${script_dir}/init.conf" ]] && source "${script_dir}/init.conf"
 
 # Allow overriding from environment, with defaults
-cql_user="${authSuperuserName:-cassandra}"
-cql_pass="${authSuperuserPassword:-cassandra}"
+cql_user="${authSuperuserName:-scylla}"
+cql_pass="${authSuperuserPassword:-scylla}"
 
 usage() {
     echo "Usage: $0 [-h] [-r] [host] [cqlsh options...]"

@@ -26,7 +26,7 @@ def main():
     proxy_host = "127.0.0.1"
     proxy_port = 9042  # proxy listens here and forwards to the single Scylla node
 
-    auth_provider = PlainTextAuthProvider(username="cassandra", password="cassandra")
+    auth_provider = PlainTextAuthProvider(username="scylla", password="scylla")
 
     cluster = Cluster(
         contact_points=[proxy_host],

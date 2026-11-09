@@ -14,8 +14,8 @@ work on tablets but the in-place migration is not trusted yet — and as a
 demo of counter semantics: counters cannot be INSERTed, only incremented,
 so the copy is only correct into an empty destination.
 
-Connects with username/password authentication (defaults: cassandra /
-cassandra), so the cluster needs `enableAuth=true` in init.conf.
+Connects with username/password authentication (defaults: scylla /
+scylla), so the cluster needs `enableAuth=true` in init.conf.
 
 Install driver:  pip install scylla-driver
                   (or: pip install cassandra-driver)
@@ -26,8 +26,8 @@ from cassandra.cluster import Cluster
 
 # in k8s use scylla-client
 CONTACT_POINTS = ["scylla-client"] # ["127.0.0.1"]
-USERNAME = "cassandra"
-PASSWORD = "cassandra"
+USERNAME = "scylla"
+PASSWORD = "scylla"
 SOURCE_KS = "vnodes_ks"
 DEST_KS = "tablets_ks"
 TABLE = "page_views"

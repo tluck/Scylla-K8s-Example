@@ -8,8 +8,8 @@ ver=$(basename "$jar" .jar); ver=${ver#scylla-loader-}
 java -jar "$jar" \
   -k ${KEYSPACE:-mykeyspace} \
   -t ${TABLE:-userid} \
-  -u ${USERNAME:-cassandra} \
-  -p ${PASSWORD:-cassandra} \
+  -u ${USERNAME:-scylla} \
+  -p ${PASSWORD:-scylla} \
   --dc ${DC:-dc1} \
   -s ${CONTACT_POINTS:-scylla-client} \
   -w ${WORKERS:-4} \

@@ -309,9 +309,9 @@ spec:
   secretName: ${clusterName}-server-certs # Secret where the certificate will be stored.
   duration: 2160h # Validity period (90 days).
   renewBefore: 360h # Renew before expiry (15 days).
-  commonName: cassandra
+  commonName: ${authSuperuserName:-scylla}
   dnsNames:
-    - cassandra
+    - "${authSuperuserName:-scylla}"
     - admin
     - scylla-client.${clusterNamespace}.svc
     - scylla-client-headless.${clusterNamespace}.svc
@@ -408,9 +408,9 @@ if [[ ${enableAuth} == true ]]; then
   # without re-expanding those '$'. The quotes around the values in the heredoc itself are
   # literal to bash (heredocs don't honor quoting) and exist only for the YAML parser.
   # Both can be overridden from init.conf.
-  authSuperuserName="${authSuperuserName:-cassandra}"
+  authSuperuserName="${authSuperuserName:-scylla}"
   if [[ -z ${authSuperuserSaltedPassword:-} ]]; then
-    authSuperuserSaltedPassword='$6$XCUuMp2zO2RidWq7$TQYL1.w5Cl.wnrYJcFfGoN9E.wEwEjf2S.VcXnI4diQmk2Q2ZJ5G81pJ2Gum0QKErfx0J7D96bwPw2RCpBAj9/'
+    authSuperuserSaltedPassword='$6$nkFE6Zuv5vfAAiaN$3FEqbteROUgOTVcd4Gz0CrR6BptX4mf.4Mh9eb9LXIQNDjWLUA9e67Iu4HQXlPA.S8l.7Gt4oTKmfnqaufikA/'
   fi
   # generate the configMap
   kubectl -n ${clusterNamespace} apply --server-side -f=- <<EOF
@@ -423,7 +423,7 @@ data:
     api_address: 0.0.0.0
     authorizer: CassandraAuthorizer
     ${passAuth}authenticator: PasswordAuthenticator
-    # starting with 2026.2 the superuser is not preset/hardcoded/default (cassandra/cassandra note encrypted pw)
+    # starting with 2026.2 the superuser is not preset/hardcoded/default (set via authSuperuserName/authSuperuserSaltedPassword in init.conf; the pw is a SHA-512 crypt hash)
     ${feature_2026_2}auth_superuser_name: '${authSuperuserName}'
     ${feature_2026_2}auth_superuser_salted_password: '${authSuperuserSaltedPassword}'
     # uncomment to disable non-TLS ports
@@ -614,9 +614,9 @@ spec:
   secretName: ${clusterName}-client-certs # Secret where the certificate will be stored.
   duration: 2160h # Validity period (90 days).
   renewBefore: 360h # Renew before expiry (15 days).
-  commonName: cassandra
+  commonName: ${authSuperuserName:-scylla}
   dnsNames:
-    - cassandra
+    - "${authSuperuserName:-scylla}"
     - admin
   issuerRef:
     name: ${issuerName}
@@ -923,9 +923,9 @@ metadata:
   namespace: ${scyllaManagerNamespace}
 spec:
   secretName: scylla-manager-certs
-  commonName: cassandra
+  commonName: ${authSuperuserName:-scylla}
   dnsNames:
-    - "cassandra"
+    - "${authSuperuserName:-scylla}"
     - "*.${scyllaManagerNamespace}.svc"
     - "*.${scyllaManagerNamespace}.svc.cluster.local"
   issuerRef:

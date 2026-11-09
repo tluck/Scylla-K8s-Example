@@ -6,8 +6,8 @@ from cassandra.auth import PlainTextAuthProvider
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--hosts', default="scylla-client.scylla-dc1.svc", help='Comma-separated ScyllaDB node IPs')
-    parser.add_argument('-u', '--username', default="cassandra", help='ScyllaDB username')
-    parser.add_argument('-p', '--password', default="cassandra", help='ScyllaDB password')
+    parser.add_argument('-u', '--username', default="scylla", help='ScyllaDB username')
+    parser.add_argument('-p', '--password', default="scylla", help='ScyllaDB password')
     parser.add_argument('-q', '--query', required=True, help='UserID to lookup (e.g. "user826614")')
     return parser.parse_args()
 

@@ -2,8 +2,8 @@
 
 # connection settings come from the environment (e.g. . cluster-<id>.env from Scylla-Examples/sc_api/gen_cluster_env.bash)
 CONTACT_POINTS=${CONTACT_POINTS:-scylla-client}
-USERNAME=${USERNAME:-cassandra}
-PASSWORD=${PASSWORD:-cassandra}
+USERNAME=${USERNAME:-scylla}
+PASSWORD=${PASSWORD:-scylla}
 DC=${DC:-dc1}
 if [[ $1 == "-x" ]]; then
     init=1

@@ -20,8 +20,8 @@ public class AlternatorUserIdLoader {
 
     public static class Args {
         String hosts = "scylla-client.scylla-dc1.svc";
-        String username = "cassandra";
-        String password = "cassandra";
+        String username = "scylla";
+        String password = "scylla";
         boolean delete = false;
         String keyspace = "alternator_userid";
         int userIdStart = 1;

@@ -14,8 +14,8 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--hosts', default="scylla-client.scylla-dc1.svc")
-    parser.add_argument('-u', '--username', default="cassandra")
-    parser.add_argument('-p', '--password', default="cassandra")
+    parser.add_argument('-u', '--username', default="scylla")
+    parser.add_argument('-p', '--password', default="scylla")
     parser.add_argument('--batch_size', type=int, default=1000)
     parser.add_argument('--token-step', type=int, default=2**64 // 64,
                         help='Token range width per thread')

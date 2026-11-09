@@ -104,6 +104,7 @@ if [[ ${status} == *"not found"* ]]; then
 # kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
 # kubectl apply --force-conflicts --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd/monitoring.coreos.com_thanosrulers.yaml
 helm install monitoring prometheus-community/kube-prometheus-stack \
+  ${kubePrometheusStackVersion:+--version ${kubePrometheusStackVersion}} \
   --create-namespace \
   --namespace ${scyllaMonitoringNamespace} \
   --set crds.enabled=true \
